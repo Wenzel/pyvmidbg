@@ -33,6 +33,11 @@ class LibVMIClient(GDBClient):
             pkt = GDBPacket(reply)
             self.send_packet(pkt)
             return True
+        if re.match(b'TStatus', packet_data):
+            # Ask the stub if there is a trace experiment running right now
+            # reply: No trace has been run yet
+            self.send_packet(GDBPacket(b'T0;tnotrun:0'))
+            return True
         return False
 
     def cmd_v(self, packet_data):
