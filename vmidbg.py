@@ -53,6 +53,11 @@ class LibVMIClient(GDBClient):
             # send end of thread list
             self.send_packet(GDBPacket(b'l'))
             return True
+        if re.match(b'Attached', packet_data):
+            # attach existing process: 0
+            # attach new process: 1
+            self.send_packet(GDBPacket(b'0'))
+            return True
         return False
 
     def cmd_H(self, packet_data):
