@@ -26,7 +26,8 @@ class GDBPacket():
 class GDBClient():
 
     def __init__(self, conn, addr):
-        self.log = logging.getLogger('client')
+        _, client_port = addr
+        self.log = logging.getLogger('client-{}'.format(client_port))
         self.sock = conn
         self.addr = addr
         self.sock.setblocking(True)
