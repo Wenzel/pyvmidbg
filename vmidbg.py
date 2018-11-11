@@ -32,6 +32,20 @@ class LibVMIClient(GDBClient):
             reply = b'PacketSize=%x' % PACKET_SIZE
             pkt = GDBPacket(reply)
             self.send_packet(pkt)
+            return True
+        return False
+
+    def cmd_H(self, packet_data):
+        m = re.match(b'(?P<op>[cg])(?P<tid>([0-9a-f])+|-1)', packet_data)
+        if m:
+            op = m.group('op')
+            tid = int(m.group('tid'), 16)
+            self.cur_tid = tid
+            # TODO op, Enn
+            self.send_packet(GDBPacket(b'OK'))
+            return True
+        return False
+
 
 def main(args):
     address = args['<address>']

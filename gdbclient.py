@@ -33,6 +33,7 @@ class GDBClient():
         self.fsock = self.sock.makefile(mode='rw')
         self.buffer = b''
         self.last_pkt = None
+        self.cur_tid = None
 
     def read_packet(self):
         epoll = select.epoll()
@@ -120,7 +121,11 @@ class GDBClient():
             handler_name = 'cmd_{}'.format(cmd)
             self.log.info('trying handler {}'.format(handler_name))
             handler = getattr(self, handler_name)
-            handler(cmd_data)
         except AttributeError:
-            self.log.info('unhandled command {}'.format(cmd))
+            self.log.info('no handler for command {}'.format(cmd))
             self.send_packet(GDBPacket(b''))
+        else:
+            handled = handler(cmd_data)
+            if not handled:
+                self.log.info('unhandled command {}'.format(cmd))
+                self.send_packet(GDBPacket(b''))
