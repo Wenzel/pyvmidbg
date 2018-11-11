@@ -58,6 +58,10 @@ class LibVMIClient(GDBClient):
             # attach new process: 1
             self.send_packet(GDBPacket(b'0'))
             return True
+        if re.match(b'C', packet_data):
+            # return current thread id
+            self.send_packet(GDBPacket(b'QC%x' % self.cur_tid))
+            return True
         return False
 
     def cmd_H(self, packet_data):
