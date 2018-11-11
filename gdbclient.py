@@ -14,11 +14,11 @@ class GDBPacket():
     def __init__(self, packet_data):
         self.packet_data = packet_data
 
-    def generate(self):
+    def to_bytes(self):
         checksum = sum(self.packet_data) % 256
         header = b'$'
         footer = b'#'
-        checksum_str = struct.pack('>H', checksum)
+        checksum_str = b'%x' % checksum
         sequence = (header, self.packet_data, footer, checksum_str)
         return b''.join(sequence)
 
@@ -93,7 +93,10 @@ class GDBClient():
         self.sock.sendall(msg)
 
     def send_packet(self, pkt):
-        self.send_msg(pkt.generate())
+        self.last_pkt = pkt
+        reply = pkt.to_bytes()
+        self.log.debug('reply: %s', reply)
+        self.send_msg(pkt.to_bytes())
 
     def handle_rsp(self):
         self.log.info('connected')
