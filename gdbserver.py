@@ -26,11 +26,13 @@ class GDBServer():
 
     def listen(self):
         self.sock.listen(MAX_CLIENTS)
-        logging.info('listening on %s:%d', self.address, self.port)
+        log = logging.getLogger('server')
+        log.info('listening on %s:%d', self.address, self.port)
 
         while True:
             conn, addr = self.sock.accept()
+            log.info('new client %s', addr)
             client = GDBClient(conn, addr)
-            client.handle_connexion()
+            client.handle_rsp()
             # future = self.pool.submit(client.handle_connexion)
             # self.future_to_client[future] = client
