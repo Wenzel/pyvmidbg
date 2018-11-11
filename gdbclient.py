@@ -2,8 +2,15 @@ import logging
 import re
 import struct
 import select
+from enum import Enum
 
 PACKET_SIZE = 4096
+
+
+class GDBCmd(Enum):
+    CMD_Q   = 'q'
+    CMD_H   = 'H'
+
 
 class ChecksumError(Exception):
     pass
@@ -34,6 +41,7 @@ class GDBClient():
         self.fsock = self.sock.makefile(mode='rw')
         self.buffer = b''
         self.last_pkt = None
+        self.cmd_to_handler = {}
         self.cur_tid = None
 
     def read_packet(self):
@@ -114,16 +122,14 @@ class GDBClient():
                 self.log.info('new packet: %s', packet_data)
                 self.send_msg(b'+')
 
-            self.cmd_dispatcher(packet_data)
+            self.call_handler(packet_data)
 
-    def cmd_dispatcher(self, packet_data):
+    def call_handler(self, packet_data):
         cmd, cmd_data = chr(packet_data[0]), packet_data[1:]
         try:
-            handler_name = 'cmd_{}'.format(cmd)
-            self.log.info('trying handler {}'.format(handler_name))
-            handler = getattr(self, handler_name)
-        except AttributeError:
-            self.log.info('no handler for command {}'.format(cmd))
+            handler = self.cmd_to_handler[GDBCmd(cmd)]
+        except (ValueError, KeyError):
+            self.log.info('unknown command {}'.format(cmd))
             self.send_packet(GDBPacket(b''))
         else:
             handled = handler(cmd_data)

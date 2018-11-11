@@ -19,12 +19,16 @@ import re
 from docopt import docopt
 
 from gdbserver import GDBServer
-from gdbclient import GDBClient, GDBPacket, PACKET_SIZE
+from gdbclient import GDBClient, GDBPacket, GDBCmd, PACKET_SIZE
 
 class LibVMIClient(GDBClient):
 
     def __init__(self, conn, addr):
         super().__init__(conn, addr)
+        self.cmd_to_handler = {
+            GDBCmd.CMD_Q: self.cmd_q,
+            GDBCmd.CMD_H: self.cmd_H
+        }
 
 
     def cmd_q(self, packet_data):
@@ -38,18 +42,9 @@ class LibVMIClient(GDBClient):
             # reply: No trace has been run yet
             self.send_packet(GDBPacket(b'T0;tnotrun:0'))
             return True
-        return False
-
-    def cmd_v(self, packet_data):
-        if re.match(b'MustReplyEmpty', packet_data):
-            # The correct reply to an unknown ‘v’ packet is to return
-            # the empty string
-            # The ‘vMustReplyEmpty’ is used as a feature test to check how
-            # gdbserver handles unknown packets
-            # it is important that this packet be handled in the same way as
-            # other unknown ‘v’ packets
-            self.send_packet(GDBPacket(b''))
-            return True
+        if re.match(b'TfV', packet_data):
+            # TODO
+            return False
         return False
 
     def cmd_H(self, packet_data):
