@@ -15,10 +15,11 @@ Options:
 
 import logging
 import sys
+import re
 from docopt import docopt
 
 from gdbserver import GDBServer
-from gdbclient import GDBClient
+from gdbclient import GDBClient, GDBPacket, PACKET_SIZE
 
 class LibVMIClient(GDBClient):
 
@@ -26,6 +27,11 @@ class LibVMIClient(GDBClient):
         super().__init__(conn, addr)
 
 
+    def cmd_q(self, packet_data):
+        if re.match(b'Supported', packet_data):
+            reply = b'PacketSize=%x' % PACKET_SIZE
+            pkt = GDBPacket(reply)
+            self.send_packet(pkt)
 
 def main(args):
     address = args['<address>']
