@@ -46,6 +46,13 @@ class LibVMIClient(GDBClient):
         if re.match(b'TfV', packet_data):
             # TODO
             return False
+        if re.match(b'fThreadInfo', packet_data):
+            self.send_packet(GDBPacket(b'm0'))
+            return True
+        if re.match(b'sThreadInfo', packet_data):
+            # send end of thread list
+            self.send_packet(GDBPacket(b'l'))
+            return True
         return False
 
     def cmd_H(self, packet_data):
