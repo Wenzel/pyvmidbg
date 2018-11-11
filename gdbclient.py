@@ -1,5 +1,6 @@
 import logging
 import re
+import struct
 import select
 
 PACKET_SIZE = 4096
@@ -7,10 +8,20 @@ PACKET_SIZE = 4096
 class ChecksumError(Exception):
     pass
 
+
 class GDBPacket():
 
-    def __init__(self, packet):
-        self.packet = packet
+    def __init__(self, packet_data):
+        self.packet_data = packet_data
+
+    def generate(self):
+        checksum = sum(self.packet_data) % 256
+        header = b'$'
+        footer = b'#'
+        checksum_str = struct.pack('>H', checksum)
+        sequence = (header, self.packet_data, footer, checksum_str)
+        return b''.join(sequence)
+
 
 class GDBClient():
 
@@ -78,15 +89,11 @@ class GDBClient():
         if checksum != packet_checksum:
             raise ChecksumError('invalid checksum received')
 
-    def send_ack(self, validity):
-        if validity:
-            c = b'+'
-        else:
-            c = b'-'
-        self.sock.sendall(c)
+    def send_msg(self, msg):
+        self.sock.sendall(msg)
 
     def send_packet(self, pkt):
-        pass
+        self.send_msg(pkt.generate())
 
     def handle_rsp(self):
         self.log.info('connected')
@@ -98,17 +105,19 @@ class GDBClient():
             except ChecksumError:
                 # ask to resend packet
                 self.log.debug('invalid checksum')
-                self.send_ack(False)
+                self.send_msg(b'-')
             else:
                 self.log.info('new packet: %s', packet_data)
-                self.send_ack(True)
+                self.send_msg(b'+')
 
-            cmd, cmd_data = chr(packet_data[0]), packet_data[1:]
-            # dispatcher
-            try:
-                handler_name = 'cmd_{}'.format(cmd)
-                self.log.info('trying handler {}'.format(handler_name))
-                handler = getattr(self, handler_name)
-                handler(cmd_data)
-            except AttributeError:
-                self.log.info('unhandled command {}'.format(cmd))
+            self.cmd_dispatcher(packet_data)
+
+    def cmd_dispatcher(self, packet_data):
+        cmd, cmd_data = chr(packet_data[0]), packet_data[1:]
+        try:
+            handler_name = 'cmd_{}'.format(cmd)
+            self.log.info('trying handler {}'.format(handler_name))
+            handler = getattr(self, handler_name)
+            handler(cmd_data)
+        except AttributeError:
+            self.log.info('unhandled command {}'.format(cmd))

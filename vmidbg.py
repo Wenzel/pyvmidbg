@@ -18,6 +18,14 @@ import sys
 from docopt import docopt
 
 from gdbserver import GDBServer
+from gdbclient import GDBClient
+
+class LibVMIClient(GDBClient):
+
+    def __init__(self, conn, addr):
+        super().__init__(conn, addr)
+
+
 
 def main(args):
     address = args['<address>']
@@ -25,7 +33,7 @@ def main(args):
 
     logging.basicConfig(level=logging.DEBUG)
 
-    with GDBServer(address, port) as server:
+    with GDBServer(address, port, client_cls=LibVMIClient) as server:
         server.listen()
 
 
