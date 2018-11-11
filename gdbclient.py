@@ -127,5 +127,7 @@ class GDBClient():
         else:
             handled = handler(cmd_data)
             if not handled:
-                self.log.info('unhandled command {}'.format(cmd))
+                self.log.info('command %s: FAIL', cmd)
                 self.send_packet(GDBPacket(b''))
+            else:
+                self.log.info('command %s: DONE', cmd)

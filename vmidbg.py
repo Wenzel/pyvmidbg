@@ -35,6 +35,18 @@ class LibVMIClient(GDBClient):
             return True
         return False
 
+    def cmd_v(self, packet_data):
+        if re.match(b'MustReplyEmpty', packet_data):
+            # The correct reply to an unknown ‘v’ packet is to return
+            # the empty string
+            # The ‘vMustReplyEmpty’ is used as a feature test to check how
+            # gdbserver handles unknown packets
+            # it is important that this packet be handled in the same way as
+            # other unknown ‘v’ packets
+            self.send_packet(GDBPacket(b''))
+            return True
+        return False
+
     def cmd_H(self, packet_data):
         m = re.match(b'(?P<op>[cg])(?P<tid>([0-9a-f])+|-1)', packet_data)
         if m:
