@@ -1,15 +1,18 @@
 import logging
 import re
-import struct
 import select
 from enum import Enum
 
 PACKET_SIZE = 4096
 
 
+class GDBSignal(Enum):
+    TRAP    = 5
+
 class GDBCmd(Enum):
-    CMD_Q   = 'q'
-    CMD_H   = 'H'
+    CMD_Q       = 'q'
+    CMD_H       = 'H'
+    CMD_QMARK   = '?'
 
 
 class ChecksumError(Exception):

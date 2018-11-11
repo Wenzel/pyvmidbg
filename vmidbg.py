@@ -19,7 +19,7 @@ import re
 from docopt import docopt
 
 from gdbserver import GDBServer
-from gdbclient import GDBClient, GDBPacket, GDBCmd, PACKET_SIZE
+from gdbclient import GDBClient, GDBPacket, GDBCmd, GDBSignal, PACKET_SIZE
 
 class LibVMIClient(GDBClient):
 
@@ -27,7 +27,8 @@ class LibVMIClient(GDBClient):
         super().__init__(conn, addr)
         self.cmd_to_handler = {
             GDBCmd.CMD_Q: self.cmd_q,
-            GDBCmd.CMD_H: self.cmd_H
+            GDBCmd.CMD_H: self.cmd_H,
+            GDBCmd.CMD_QMARK: self.cmd_qmark
         }
 
 
@@ -58,6 +59,10 @@ class LibVMIClient(GDBClient):
             return True
         return False
 
+    def cmd_qmark(self, packet_data):
+        msg = b'S%.2x' % GDBSignal.TRAP.value
+        self.send_packet(GDBPacket(msg))
+        return True
 
 def main(args):
     address = args['<address>']
