@@ -18,7 +18,7 @@ class GDBPacket():
         checksum = sum(self.packet_data) % 256
         header = b'$'
         footer = b'#'
-        checksum_str = b'%x' % checksum
+        checksum_str = b'%.2x' % checksum
         sequence = (header, self.packet_data, footer, checksum_str)
         return b''.join(sequence)
 
@@ -90,12 +90,11 @@ class GDBClient():
             raise ChecksumError('invalid checksum received')
 
     def send_msg(self, msg):
+        self.log.debug('send: %s', msg)
         self.sock.sendall(msg)
 
     def send_packet(self, pkt):
         self.last_pkt = pkt
-        reply = pkt.to_bytes()
-        self.log.debug('reply: %s', reply)
         self.send_msg(pkt.to_bytes())
 
     def handle_rsp(self):
@@ -124,3 +123,4 @@ class GDBClient():
             handler(cmd_data)
         except AttributeError:
             self.log.info('unhandled command {}'.format(cmd))
+            self.send_packet(GDBPacket(b''))
