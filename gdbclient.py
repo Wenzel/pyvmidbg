@@ -1,9 +1,32 @@
 import logging
 import re
 import select
+from functools import wraps
 from enum import Enum
 
 PACKET_SIZE = 4096
+MAX_ATTEMPTS = 3
+
+
+def expect_ack(func):
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        attempts = 0
+        pkt_ack = False
+        while not pkt_ack and attempts != MAX_ATTEMPTS:
+            func(self, *args, **kwargs)
+            # read ack
+            c_ack = self.sock.recv(1)
+            if re.match(b'\+', c_ack):
+                self.log.debug('send: ack')
+                pkt_ack = True
+            if re.match(b'-', c_ack):
+                self.log.debug('send: retransmit')
+                func(self, *args, **kwargs)
+                attempts += 1
+        if not pkt_ack:
+            raise RuntimeError('send: max attempt to send packet')
+    return wrapper
 
 
 class GDBSignal(Enum):
@@ -53,34 +76,17 @@ class GDBClient():
         epoll.register(self.sock.fileno(),  select.EPOLLIN | select.EPOLLHUP
                        | select.EPOLLRDHUP)
         while True:
-            if len(self.buffer) == 0:
-                events = epoll.poll()
-                for fileno, event in events:
-                    if fileno == self.sock.fileno():
-                        if event == select.EPOLLIN:
-                            self.buffer = self.sock.recv(PACKET_SIZE)
-                            self.log.debug('buffer: %s', self.buffer)
-                        if event == select.EPOLLHUP:
-                            self.log.debug('EPOLLHUP')
-                        if event == select.EPOLLRDHUP:
-                            self.log.debug('EPOLLRDHUP')
-                    else:
-                        raise RuntimeError('unknown fd %d', fileno)
-            # ack ok ?
-            m = re.match(b'\+', self.buffer)
-            if m:
-                self.log.debug('acknowledged')
-                self.buffer = self.buffer[1:]
-                continue
-            m = re.match(b'-', self.buffer)
-            # ack retransmit
-            if m:
-                self.log.debug('retransmit last packet')
-                self.buffer = self.buffer[1:]
-                if self.last_pkt is None:
-                    raise RuntimeError('no last packet to retransmit')
-                self.send_packet(self.last_pkt)
-                # continue
+            events = epoll.poll()
+            for fileno, event in events:
+                if fileno == self.sock.fileno():
+                    if event == select.EPOLLIN:
+                        self.buffer += self.sock.recv(PACKET_SIZE)
+                    if event == select.EPOLLHUP:
+                        self.log.debug('EPOLLHUP')
+                    if event == select.EPOLLRDHUP:
+                        self.log.debug('EPOLLRDHUP')
+                else:
+                    raise RuntimeError('unknown fd %d', fileno)
             # CTRL-C ?
             m = re.match(b'\x03', self.buffer)
             if m:
@@ -94,9 +100,7 @@ class GDBClient():
                 self.validate_packet(packet_data, packet_checksum)
                 self.buffer = self.buffer[m.endpos+1:]
                 return packet_data
-            self.log.info('buffer data: %s', self.buffer)
             # not enough packet data to match a packet regex
-            raise RuntimeError('not implemented')
 
     def validate_packet(self, packet_data, packet_checksum):
         checksum = sum(packet_data) % 256
@@ -107,12 +111,17 @@ class GDBClient():
         self.log.debug('send: %s', msg)
         self.sock.sendall(msg)
 
+    @expect_ack
     def send_packet(self, pkt):
-        self.last_pkt = pkt
         self.send_msg(pkt.to_bytes())
 
     def handle_rsp(self):
         self.log.info('connected')
+
+        # read first ack
+        c_ack = self.sock.recv(1)
+        if not re.match(b'\+', c_ack):
+            raise RuntimeError('Fail to receive first ack')
 
         while True:
             packet_data = None
