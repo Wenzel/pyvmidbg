@@ -2,16 +2,16 @@ import logging
 import socket
 # from concurrent.futures import ThreadPoolExecutor
 
-from gdbclient import GDBClient
+from gdbstub import GDBStub
 
 MAX_CLIENTS = 1
 
 class GDBServer():
 
-    def __init__(self, address, port, client_cls=GDBClient):
+    def __init__(self, address, port, stub_cls=GDBStub):
         self.address = address
         self.port = port
-        self.client_cls = client_cls
+        self.stub_cls = stub_cls
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.sock.bind((address, port))
@@ -33,7 +33,7 @@ class GDBServer():
         while True:
             conn, addr = self.sock.accept()
             log.info('new client %s', addr)
-            client = self.client_cls(conn, addr)
+            client = self.stub_cls(conn, addr)
             client.handle_rsp()
             # future = self.pool.submit(client.handle_connexion)
             # self.future_to_client[future] = client

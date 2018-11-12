@@ -58,7 +58,7 @@ class GDBPacket():
         return b''.join(sequence)
 
 
-class GDBClient():
+class GDBStub():
 
     def __init__(self, conn, addr):
         _, client_port = addr

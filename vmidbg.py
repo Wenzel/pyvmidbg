@@ -21,9 +21,10 @@ from binascii import hexlify
 from docopt import docopt
 
 from gdbserver import GDBServer
-from gdbclient import GDBClient, GDBPacket, GDBCmd, GDBSignal, PACKET_SIZE
+from gdbstub import GDBStub, GDBPacket, GDBCmd, GDBSignal, PACKET_SIZE
 
-class LibVMIClient(GDBClient):
+
+class LibVMIStub(GDBStub):
 
     def __init__(self, conn, addr):
         super().__init__(conn, addr)
@@ -104,13 +105,14 @@ class LibVMIClient(GDBClient):
         self.send_packet(GDBPacket(b'OK'))
         return True
 
+
 def main(args):
     address = args['--address']
     port = int(args['<port>'])
 
     logging.basicConfig(level=logging.DEBUG)
 
-    with GDBServer(address, port, client_cls=LibVMIClient) as server:
+    with GDBServer(address, port, stub_cls=LibVMIStub) as server:
         server.listen()
 
 
