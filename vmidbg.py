@@ -29,9 +29,10 @@ class LibVMIClient(GDBClient):
         super().__init__(conn, addr)
         self.cmd_to_handler = {
             GDBCmd.CMD_Q: self.cmd_q,
-            GDBCmd.CMD_H: self.cmd_H,
+            GDBCmd.CMD_CAP_H: self.cmd_H,
             GDBCmd.CMD_QMARK: self.cmd_qmark,
-            GDBCmd.CMD_G: self.cmd_g
+            GDBCmd.CMD_G: self.cmd_g,
+            GDBCmd.CMD_CAP_D: self.cmd_D
         }
 
 
@@ -95,6 +96,12 @@ class LibVMIClient(GDBClient):
         for r in registers:
             msg += hexlify(struct.pack('@I', r))
         self.send_packet(GDBPacket(msg))
+        return True
+
+    def cmd_D(self, packet_data):
+        # detach
+        self.attached = False
+        self.send_packet(GDBPacket(b'OK'))
         return True
 
 def main(args):

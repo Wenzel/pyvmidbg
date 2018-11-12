@@ -34,9 +34,10 @@ class GDBSignal(Enum):
 
 class GDBCmd(Enum):
     CMD_Q       = 'q'
-    CMD_H       = 'H'
+    CMD_CAP_H   = 'H'
     CMD_QMARK   = '?'
     CMD_G       = 'g'
+    CMD_CAP_D   = 'D'
 
 
 class ChecksumError(Exception):
@@ -66,6 +67,7 @@ class GDBClient():
         self.addr = addr
         self.sock.setblocking(True)
         self.fsock = self.sock.makefile(mode='rw')
+        self.attached = True
         self.buffer = b''
         self.last_pkt = None
         self.cmd_to_handler = {}
@@ -75,7 +77,7 @@ class GDBClient():
         epoll = select.epoll()
         epoll.register(self.sock.fileno(),  select.EPOLLIN | select.EPOLLHUP
                        | select.EPOLLRDHUP)
-        while True:
+        while self.attached:
             events = epoll.poll()
             for fileno, event in events:
                 if fileno == self.sock.fileno():
@@ -123,7 +125,7 @@ class GDBClient():
         if not re.match(b'\+', c_ack):
             raise RuntimeError('Fail to receive first ack')
 
-        while True:
+        while self.attached:
             packet_data = None
             try:
                 packet_data = self.read_packet()
