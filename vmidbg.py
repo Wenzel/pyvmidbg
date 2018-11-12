@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 
-"""GDB server.
+"""LibVMI-based GDB server.
 
 Usage:
-  vmidbg.py <address> <port>
+  vmidbg.py [options] <port>
   vmidbg.py (-h | --help)
-  vmidbg.py --version
 
 Options:
-  -h --help     Show this screen.
-  --version     Show version.
+  -a ADDR, --address=<ADDR>     Server address to listen on [default: 127.0.0.1]
+  -h --help                     Show this screen.
+  --version                     Show version.
 
 """
 
@@ -98,7 +98,7 @@ class LibVMIClient(GDBClient):
         return True
 
 def main(args):
-    address = args['<address>']
+    address = args['--address']
     port = int(args['<port>'])
 
     logging.basicConfig(level=logging.DEBUG)
