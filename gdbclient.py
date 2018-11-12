@@ -13,6 +13,7 @@ class GDBCmd(Enum):
     CMD_Q       = 'q'
     CMD_H       = 'H'
     CMD_QMARK   = '?'
+    CMD_G       = 'g'
 
 
 class ChecksumError(Exception):

@@ -16,6 +16,8 @@ Options:
 import logging
 import sys
 import re
+import struct
+from binascii import hexlify
 from docopt import docopt
 
 from gdbserver import GDBServer
@@ -28,7 +30,8 @@ class LibVMIClient(GDBClient):
         self.cmd_to_handler = {
             GDBCmd.CMD_Q: self.cmd_q,
             GDBCmd.CMD_H: self.cmd_H,
-            GDBCmd.CMD_QMARK: self.cmd_qmark
+            GDBCmd.CMD_QMARK: self.cmd_qmark,
+            GDBCmd.CMD_G: self.cmd_g
         }
 
 
@@ -77,6 +80,20 @@ class LibVMIClient(GDBClient):
 
     def cmd_qmark(self, packet_data):
         msg = b'S%.2x' % GDBSignal.TRAP.value
+        self.send_packet(GDBPacket(msg))
+        return True
+
+    def cmd_g(self, packet_data):
+        # test data, 15 registers, 32 bits
+        # eax -> edi (8 regs)
+        registers = [x+1 for x in range(1, 9)]
+        # eip, eflags (2 regs)
+        registers.extend([x+1 for x in range(9, 11)])
+        # ss -> gs (6 regs)
+        registers.extend([x+1 for x in range(11, 17)])
+        msg = b''
+        for r in registers:
+            msg += hexlify(struct.pack('@I', r))
         self.send_packet(GDBPacket(msg))
         return True
 
