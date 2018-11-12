@@ -5,6 +5,7 @@ from binascii import hexlify
 
 from .gdbstub import GDBStub, GDBPacket, GDBCmd, GDBSignal, PACKET_SIZE
 
+
 class LibVMIStub(GDBStub):
 
     def __init__(self, conn, addr):
@@ -17,7 +18,6 @@ class LibVMIStub(GDBStub):
             GDBCmd.CMD_CAP_D: self.cmd_D,
             GDBCmd.CMD_M: self.cmd_m
         }
-
 
     def cmd_q(self, packet_data):
         if re.match(b'Supported', packet_data):
@@ -96,4 +96,3 @@ class LibVMIStub(GDBStub):
             self.send_packet(GDBPacket(msg))
             return True
         return False
-

@@ -14,14 +14,14 @@ Options:
 """
 
 import logging
-import sys
 from docopt import docopt
 
 from .gdbserver import GDBServer
 from .libvmistub import LibVMIStub
 
 
-def main(args):
+def main():
+    args = docopt(__doc__)
     address = args['--address']
     port = int(args['<port>'])
 
@@ -32,6 +32,4 @@ def main(args):
 
 
 if __name__ == "__main__":
-    args = docopt(__doc__)
-    ret = main(args)
-    sys.exit(ret)
+    main()
