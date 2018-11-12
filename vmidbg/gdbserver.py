@@ -2,7 +2,7 @@ import logging
 import socket
 # from concurrent.futures import ThreadPoolExecutor
 
-from gdbstub import GDBStub
+from .gdbstub import GDBStub
 
 MAX_CLIENTS = 1
 

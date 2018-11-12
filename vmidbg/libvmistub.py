@@ -1,28 +1,9 @@
-#!/usr/bin/env python3
-
-"""LibVMI-based GDB server.
-
-Usage:
-  vmidbg.py [options] <port>
-  vmidbg.py (-h | --help)
-
-Options:
-  -a ADDR, --address=<ADDR>     Server address to listen on [default: 127.0.0.1]
-  -h --help                     Show this screen.
-  --version                     Show version.
-
-"""
-
 import logging
-import sys
 import re
 import struct
 from binascii import hexlify
-from docopt import docopt
 
-from gdbserver import GDBServer
-from gdbstub import GDBStub, GDBPacket, GDBCmd, GDBSignal, PACKET_SIZE
-
+from .gdbstub import GDBStub, GDBPacket, GDBCmd, GDBSignal, PACKET_SIZE
 
 class LibVMIStub(GDBStub):
 
@@ -116,18 +97,3 @@ class LibVMIStub(GDBStub):
             return True
         return False
 
-
-def main(args):
-    address = args['--address']
-    port = int(args['<port>'])
-
-    logging.basicConfig(level=logging.DEBUG)
-
-    with GDBServer(address, port, stub_cls=LibVMIStub) as server:
-        server.listen()
-
-
-if __name__ == "__main__":
-    args = docopt(__doc__)
-    ret = main(args)
-    sys.exit(ret)

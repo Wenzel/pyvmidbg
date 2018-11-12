@@ -4,7 +4,7 @@ LibVMI-based GDB server, implemented in Python
 
 ![vmidbg](https://user-images.githubusercontent.com/964610/48309807-87ff5680-e581-11e8-8b4c-556462d09f60.png)
 
-# requirements
+# Requirements
 
 - `Python 3`
 - `docopt`
