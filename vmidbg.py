@@ -33,7 +33,8 @@ class LibVMIStub(GDBStub):
             GDBCmd.CMD_CAP_H: self.cmd_H,
             GDBCmd.CMD_QMARK: self.cmd_qmark,
             GDBCmd.CMD_G: self.cmd_g,
-            GDBCmd.CMD_CAP_D: self.cmd_D
+            GDBCmd.CMD_CAP_D: self.cmd_D,
+            GDBCmd.CMD_M: self.cmd_m
         }
 
 
@@ -104,6 +105,16 @@ class LibVMIStub(GDBStub):
         self.attached = False
         self.send_packet(GDBPacket(b'OK'))
         return True
+
+    def cmd_m(self, packet_data):
+        m = re.match(b'(?P<addr>.*),(?P<length>.*)', packet_data)
+        if m:
+            addr = int(m.group('addr'), 16)
+            length = int(m.group('length'), 16)
+            msg = b'%.2x' * 0 * length
+            self.send_packet(GDBPacket(msg))
+            return True
+        return False
 
 
 def main(args):
