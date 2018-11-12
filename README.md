@@ -9,6 +9,27 @@ LibVMI-based GDB server, implemented in Python
 - `Python 3`
 - `docopt`
 
+# Setup
+
+~~~
+virtualenv -p python3 venv
+source venv/bin/activate
+pip install .
+~~~
+
+# Run
+
+~~~
+vmidbg <port>
+~~~
+
+example:
+~~~
+(venv) $ vmidbg 5000
+INFO:server:listening on 127.0.0.1:5000
+...
+~~~
+
 # References
 
 - [vmidbg](https://github.com/Zentific/vmidbg): original idea and C implementation
