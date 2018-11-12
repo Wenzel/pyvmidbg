@@ -1,6 +1,7 @@
 import logging
 import re
 import select
+import socket
 from functools import wraps
 from enum import Enum
 
@@ -66,7 +67,6 @@ class GDBStub():
         self.sock = conn
         self.addr = addr
         self.sock.setblocking(True)
-        self.fsock = self.sock.makefile(mode='rw')
         self.attached = True
         self.buffer = b''
         self.last_pkt = None
@@ -138,6 +138,9 @@ class GDBStub():
                 self.send_msg(b'+')
 
             self.call_handler(packet_data)
+        # close socket
+        self.sock.shutdown(socket.SHUT_RDWR)
+        self.sock.close()
 
     def call_handler(self, packet_data):
         cmd, cmd_data = chr(packet_data[0]), packet_data[1:]
