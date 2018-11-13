@@ -6,6 +6,7 @@ from .gdbstub import GDBStub
 
 MAX_CLIENTS = 1
 
+
 class GDBServer():
 
     def __init__(self, address, port, stub_cls=GDBStub):

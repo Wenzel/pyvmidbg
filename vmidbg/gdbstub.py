@@ -31,15 +31,16 @@ def expect_ack(func):
 
 
 class GDBSignal(Enum):
-    TRAP    = 5
+    TRAP = 5
+
 
 class GDBCmd(Enum):
-    CMD_Q       = 'q'
-    CMD_CAP_H   = 'H'
-    CMD_QMARK   = '?'
-    CMD_G       = 'g'
-    CMD_CAP_D   = 'D'
-    CMD_M       = 'm'
+    CMD_Q = 'q'
+    CMD_CAP_H = 'H'
+    CMD_QMARK = '?'
+    CMD_G = 'g'
+    CMD_CAP_D = 'D'
+    CMD_M = 'm'
 
 
 class ChecksumError(Exception):
@@ -76,8 +77,7 @@ class GDBStub():
 
     def read_packet(self):
         epoll = select.epoll()
-        epoll.register(self.sock.fileno(),  select.EPOLLIN | select.EPOLLHUP
-                       | select.EPOLLRDHUP)
+        epoll.register(self.sock.fileno(),  select.EPOLLIN | select.EPOLLHUP | select.EPOLLRDHUP)
         while self.attached:
             events = epoll.poll()
             for fileno, event in events:
