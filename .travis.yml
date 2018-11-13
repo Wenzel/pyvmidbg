@@ -1,0 +1,31 @@
+dist: trusty
+language: python
+sudo: enabled
+notifications:
+    email: false
+python:
+  - "3.5"
+  - "pypy3.5"
+
+before_install:
+  # install libvmi dependencies
+  - sudo apt-get update -qq
+  - >
+    sudo apt-get install -qq bison flex check libjson-c-dev autotools-dev automake libglib2.0-dev
+    libxc1 libxenstore3.0 libxen-dev
+    libvirt-dev
+  # clone, compile and install libvmi
+  - git clone https://github.com/libvmi/libvmi /tmp/libvmi
+  - cd /tmp/libvmi
+  - ./autogen.sh
+  - ./configure --prefix=/usr
+  - make
+  - sudo make install
+  - cd $OLDPWD
+
+install:
+  - pip install .
+  - pip install pep8
+
+script:
+  - pep8 --show-source -v
