@@ -20,7 +20,8 @@ class LibVMIStub(GDBStub):
             GDBCmd.CMD_G: self.read_registers,
             GDBCmd.CMD_CAP_D: self.cmd_D,
             GDBCmd.CMD_M: self.read_memory,
-            GDBCmd.CMD_C: self.cont_execution
+            GDBCmd.CMD_C: self.cont_execution,
+            GDBCmd.CMD_BREAKIN: self.breakin
         }
 
     def cmd_q(self, packet_data):
@@ -129,4 +130,8 @@ class LibVMIStub(GDBStub):
             addr = int(m.group('addr'), 16)
         # TODO resume execution at addr
         self.ctx.vmi.resume_vm()
+        return True
+
+    def breakin(self, packet_data):
+        self.ctx.attach()
         return True

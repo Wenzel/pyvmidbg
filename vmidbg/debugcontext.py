@@ -28,10 +28,10 @@ def dtb_to_pname(vmi, dtb):
 
 class DebugContext:
 
-    def __init__(self, vm_name):
+    def __init__(self, vm_name, process_name):
         self.log = logging.getLogger(__class__.__name__)
         self.vm_name = vm_name
-        self.target_name = None
+        self.target_name = process_name
         self.target_pid = None
         self.target_dtb = None
         self.vmi = Libvmi(self.vm_name, INIT_DOMAINNAME | INIT_EVENTS)
@@ -47,11 +47,10 @@ class DebugContext:
             pass
         self.vmi.destroy()
 
-    def attach(self, process_name):
-        self.log.info('attaching on %s', process_name)
-        self.target_name = process_name
+    def attach(self):
+        self.log.info('attaching on %s', self.target_name)
+        # VM must be running
         self.vmi.pause_vm()
-        # TODO dtb_to_pid_idle_extended
 
         cb_data = {
             'interrupted': False
