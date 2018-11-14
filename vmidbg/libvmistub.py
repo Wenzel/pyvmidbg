@@ -8,7 +8,6 @@ from libvmi import LibvmiError
 from .gdbstub import GDBStub, GDBPacket, GDBCmd, GDBSignal, PACKET_SIZE
 
 
-
 class LibVMIStub(GDBStub):
 
     def __init__(self, conn, addr, debug_ctx):

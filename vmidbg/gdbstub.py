@@ -42,6 +42,7 @@ class GDBCmd(Enum):
     CMD_CAP_D = 'D'
     CMD_M = 'm'
     CMD_C = 'c'
+    CMD_BREAKIN = '\x03'
 
 
 class ChecksumError(Exception):
@@ -95,7 +96,8 @@ class GDBStub():
             m = re.match(b'\x03', self.buffer)
             if m:
                 self.buffer = self.buffer[1:]
-                raise RuntimeError('not implemented')
+                # create a normal packet to let stub call a handler
+                return b'\x03'
             # packet ?
             m = re.match(b'\$(?P<data>.*)#(?P<checksum>..)', self.buffer)
             if m:

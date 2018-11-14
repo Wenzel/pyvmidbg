@@ -68,7 +68,6 @@ class DebugContext:
                 self.target_pid = vmi.dtb_to_pid(self.target_dtb)
                 cb_data['interrupted'] = True
 
-
         reg_event = RegEvent(X86Reg.CR3, RegAccess.W, cb_on_cr3_load, data=cb_data)
         self.vmi.register_event(reg_event)
         self.vmi.resume_vm()
