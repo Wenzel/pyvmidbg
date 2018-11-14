@@ -75,3 +75,7 @@ class DebugContext:
 
         while not cb_data['interrupted']:
             self.vmi.listen(1000)
+        # clear queue
+        self.vmi.listen(0)
+        # clear event
+        self.vmi.clear_event(reg_event)
