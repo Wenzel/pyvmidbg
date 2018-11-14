@@ -7,12 +7,14 @@ from .gdbstub import GDBStub
 MAX_CLIENTS = 1
 
 
-class GDBServer():
+class GDBServer:
 
-    def __init__(self, address, port, stub_cls=GDBStub):
+    def __init__(self, address, port, stub_cls=GDBStub, stub_args=()):
+        self.log = logging.getLogger('server')
         self.address = address
         self.port = port
         self.stub_cls = stub_cls
+        self.stub_args = stub_args
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.sock.bind((address, port))
@@ -28,13 +30,12 @@ class GDBServer():
 
     def listen(self):
         self.sock.listen(MAX_CLIENTS)
-        log = logging.getLogger('server')
-        log.info('listening on %s:%d', self.address, self.port)
+        self.log.info('listening on %s:%d', self.address, self.port)
 
         while True:
             conn, addr = self.sock.accept()
-            log.info('new client %s', addr)
-            client = self.stub_cls(conn, addr)
+            self.log.info('new client %s', addr)
+            client = self.stub_cls(conn, addr, *self.stub_args)
             client.handle_rsp()
             # future = self.pool.submit(client.handle_connexion)
             # self.future_to_client[future] = client

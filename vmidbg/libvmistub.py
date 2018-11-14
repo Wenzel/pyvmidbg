@@ -3,20 +3,24 @@ import re
 import struct
 from binascii import hexlify
 
+from libvmi import LibvmiError
+
 from .gdbstub import GDBStub, GDBPacket, GDBCmd, GDBSignal, PACKET_SIZE
+
 
 
 class LibVMIStub(GDBStub):
 
-    def __init__(self, conn, addr):
+    def __init__(self, conn, addr, debug_ctx):
         super().__init__(conn, addr)
+        self.ctx = debug_ctx
         self.cmd_to_handler = {
             GDBCmd.CMD_Q: self.cmd_q,
             GDBCmd.CMD_CAP_H: self.cmd_H,
             GDBCmd.CMD_QMARK: self.cmd_qmark,
-            GDBCmd.CMD_G: self.cmd_g,
+            GDBCmd.CMD_G: self.read_registers,
             GDBCmd.CMD_CAP_D: self.cmd_D,
-            GDBCmd.CMD_M: self.cmd_m
+            GDBCmd.CMD_M: self.read_memory
         }
 
     def cmd_q(self, packet_data):
@@ -67,17 +71,34 @@ class LibVMIStub(GDBStub):
         self.send_packet(GDBPacket(msg))
         return True
 
-    def cmd_g(self, packet_data):
-        # test data, 15 registers, 32 bits
-        # eax -> edi (8 regs)
-        registers = [x+1 for x in range(1, 9)]
-        # eip, eflags (2 regs)
-        registers.extend([x+1 for x in range(9, 11)])
-        # ss -> gs (6 regs)
-        registers.extend([x+1 for x in range(11, 17)])
-        msg = b''
-        for r in registers:
-            msg += hexlify(struct.pack('@I', r))
+    def read_registers(self, packet_data):
+        addr_width = self.ctx.vmi.get_address_width()
+        if addr_width == 4:
+            pack_fmt = '@I'
+        else:
+            pack_fmt = '@Q'
+
+        # TODO VCPU 0
+        regs = self.ctx.vmi.get_vcpuregs(0)
+        gen_regs_32 = [
+            regs.x86.rax, regs.x86.rcx, regs.x86.rdx, regs.x86.rbx,
+            regs.x86.rsp, regs.x86.rbp, regs.x86.rsi, regs.x86.rdi, regs.x86.rip
+        ]
+
+        gen_regs_64 = [
+            regs.x86.r9, regs.x86.r10, regs.x86.r11, regs.x86.r12,
+            regs.x86.r13, regs.x86.r14, regs.x86.r15
+        ]
+        # not available through libvmi
+        seg_regs = [x+1 for x in range(0, 6)]
+        # write general registers
+        msg = b''.join([hexlify(struct.pack(pack_fmt, r)) for r in gen_regs_32])
+        if addr_width == 8:
+            msg += b''.join([hexlify(struct.pack(pack_fmt, r)) for r in gen_regs_64])
+        # write eflags
+        msg += hexlify(struct.pack(pack_fmt, regs.x86.rflags))
+        # write segment registers
+        msg += b''.join([hexlify(struct.pack(pack_fmt, r)) for r in seg_regs])
         self.send_packet(GDBPacket(msg))
         return True
 
@@ -87,12 +108,16 @@ class LibVMIStub(GDBStub):
         self.send_packet(GDBPacket(b'OK'))
         return True
 
-    def cmd_m(self, packet_data):
+    def read_memory(self, packet_data):
         m = re.match(b'(?P<addr>.*),(?P<length>.*)', packet_data)
         if m:
             addr = int(m.group('addr'), 16)
             length = int(m.group('length'), 16)
-            msg = b'%.2x' * 0 * length
-            self.send_packet(GDBPacket(msg))
+            # TODO partial read
+            try:
+                buffer, bytes_read = self.ctx.vmi.read_va(addr, self.ctx.target_pid, length)
+            except LibvmiError:
+                buffer = b''
+            self.send_packet(GDBPacket(hexlify(buffer)))
             return True
         return False
