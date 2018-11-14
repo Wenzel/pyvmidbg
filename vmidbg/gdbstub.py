@@ -41,6 +41,7 @@ class GDBCmd(Enum):
     CMD_G = 'g'
     CMD_CAP_D = 'D'
     CMD_M = 'm'
+    CMD_C = 'c'
 
 
 class ChecksumError(Exception):
