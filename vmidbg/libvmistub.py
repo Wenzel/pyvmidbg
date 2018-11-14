@@ -3,7 +3,10 @@ import re
 import struct
 from binascii import hexlify
 
+from libvmi import LibvmiError
+
 from .gdbstub import GDBStub, GDBPacket, GDBCmd, GDBSignal, PACKET_SIZE
+
 
 
 class LibVMIStub(GDBStub):
@@ -17,7 +20,7 @@ class LibVMIStub(GDBStub):
             GDBCmd.CMD_QMARK: self.cmd_qmark,
             GDBCmd.CMD_G: self.read_registers,
             GDBCmd.CMD_CAP_D: self.cmd_D,
-            GDBCmd.CMD_M: self.cmd_m
+            GDBCmd.CMD_M: self.read_memory
         }
 
     def cmd_q(self, packet_data):
@@ -105,12 +108,16 @@ class LibVMIStub(GDBStub):
         self.send_packet(GDBPacket(b'OK'))
         return True
 
-    def cmd_m(self, packet_data):
+    def read_memory(self, packet_data):
         m = re.match(b'(?P<addr>.*),(?P<length>.*)', packet_data)
         if m:
             addr = int(m.group('addr'), 16)
             length = int(m.group('length'), 16)
-            msg = b'%.2x' * 0 * length
-            self.send_packet(GDBPacket(msg))
+            # TODO partial read
+            try:
+                buffer, bytes_read = self.ctx.vmi.read_va(addr, self.ctx.target_pid, length)
+            except LibvmiError:
+                buffer = b''
+            self.send_packet(GDBPacket(hexlify(buffer)))
             return True
         return False
