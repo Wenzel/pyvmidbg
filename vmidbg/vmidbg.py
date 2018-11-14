@@ -7,6 +7,7 @@ Usage:
   vmidbg.py (-h | --help)
 
 Options:
+  -d --debug                    Enable debugging
   -a ADDR, --address=<ADDR>     Server address to listen on [default: 127.0.0.1]
   -h --help                     Show this screen.
   --version                     Show version.
@@ -23,12 +24,16 @@ from .debugcontext import DebugContext
 
 def main():
     args = docopt(__doc__)
+    debug = args['--debug']
     address = args['--address']
     port = int(args['<port>'])
     vm_name = args['<vm_name>']
     process = args['<process>']
 
-    logging.basicConfig(level=logging.DEBUG)
+    log_level = logging.INFO
+    if debug:
+        log_level = logging.DEBUG
+    logging.basicConfig(level=log_level)
 
     with DebugContext(vm_name) as ctx:
         ctx.attach(process)
