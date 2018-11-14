@@ -31,7 +31,9 @@ class DebugContext:
     def __init__(self, vm_name):
         self.log = logging.getLogger(__class__.__name__)
         self.vm_name = vm_name
-        self.process = None
+        self.target_name = None
+        self.target_pid = None
+        self.target_dtb = None
         self.vmi = Libvmi(self.vm_name, INIT_DOMAINNAME | INIT_EVENTS)
 
     def __enter__(self):
@@ -47,7 +49,7 @@ class DebugContext:
 
     def attach(self, process_name):
         self.log.info('attaching on %s', process_name)
-        self.process_name = process_name
+        self.target_name = process_name
         self.vmi.pause_vm()
         # TODO dtb_to_pid_idle_extended
 
@@ -59,9 +61,11 @@ class DebugContext:
             pname = dtb_to_pname(vmi, event.cffi_event.reg_event.value)
             self.log.info('intercepted %s', pname)
 
-            pattern = re.escape(self.process_name)
+            pattern = re.escape(self.target_name)
             if re.match(pattern, pname, re.IGNORECASE):
                 vmi.pause_vm()
+                self.target_dtb = event.cffi_event.reg_event.value
+                self.target_pid = vmi.dtb_to_pid(self.target_dtb)
                 cb_data['interrupted'] = True
 
 

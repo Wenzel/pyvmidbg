@@ -32,7 +32,7 @@ def main():
 
     with DebugContext(vm_name) as ctx:
         ctx.attach(process)
-        with GDBServer(address, port, stub_cls=LibVMIStub) as server:
+        with GDBServer(address, port, stub_cls=LibVMIStub, stub_args=(ctx,)) as server:
             server.listen()
 
 if __name__ == "__main__":
