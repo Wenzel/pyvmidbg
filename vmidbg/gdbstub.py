@@ -12,21 +12,25 @@ MAX_ATTEMPTS = 3
 def expect_ack(func):
     @wraps(func)
     def wrapper(self, *args, **kwargs):
-        attempts = 0
-        pkt_ack = False
-        while not pkt_ack and attempts != MAX_ATTEMPTS:
+        if self.no_ack:
             func(self, *args, **kwargs)
-            # read ack
-            c_ack = self.sock.recv(1)
-            if re.match(b'\+', c_ack):
-                self.log.debug('send: ack')
-                pkt_ack = True
-            if re.match(b'-', c_ack):
-                self.log.debug('send: retransmit')
+        else:
+            # handle ack
+            attempts = 0
+            pkt_ack = False
+            while not pkt_ack and attempts != MAX_ATTEMPTS:
                 func(self, *args, **kwargs)
-                attempts += 1
-        if not pkt_ack:
-            raise RuntimeError('send: max attempt to send packet')
+                # read ack
+                c_ack = self.sock.recv(1)
+                if re.match(b'\+', c_ack):
+                    self.log.debug('send: ack')
+                    pkt_ack = True
+                if re.match(b'-', c_ack):
+                    self.log.debug('send: retransmit')
+                    func(self, *args, **kwargs)
+                    attempts += 1
+            if not pkt_ack:
+                raise RuntimeError('send: max attempt to send packet')
     return wrapper
 
 
@@ -35,7 +39,8 @@ class GDBSignal(Enum):
 
 
 class GDBCmd(Enum):
-    CMD_Q = 'q'
+    GEN_QUERY_GET = 'q'
+    GEN_QUERY_SET = 'Q'
     CMD_CAP_H = 'H'
     CMD_QMARK = '?'
     CMD_G = 'g'
@@ -71,6 +76,7 @@ class GDBStub():
         self.sock = conn
         self.addr = addr
         self.sock.setblocking(True)
+        self.no_ack = False
         self.attached = True
         self.buffer = b''
         self.last_pkt = None
@@ -103,7 +109,8 @@ class GDBStub():
             if m:
                 packet_data = m.group('data')
                 packet_checksum = int(m.group('checksum'), 16)
-                self.validate_packet(packet_data, packet_checksum)
+                if not self.no_ack:
+                    self.validate_packet(packet_data, packet_checksum)
                 self.buffer = self.buffer[m.endpos+1:]
                 return packet_data
             # not enough packet data to match a packet regex
@@ -139,7 +146,8 @@ class GDBStub():
                 self.send_msg(b'-')
             else:
                 self.log.info('new packet: %s', packet_data)
-                self.send_msg(b'+')
+                if not self.no_ack:
+                    self.send_msg(b'+')
 
             self.call_handler(packet_data)
         # close socket

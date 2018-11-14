@@ -14,7 +14,8 @@ class LibVMIStub(GDBStub):
         super().__init__(conn, addr)
         self.ctx = debug_ctx
         self.cmd_to_handler = {
-            GDBCmd.CMD_Q: self.cmd_q,
+            GDBCmd.GEN_QUERY_GET: self.gen_query_get,
+            GDBCmd.GEN_QUERY_SET: self.gen_query_set,
             GDBCmd.CMD_CAP_H: self.cmd_H,
             GDBCmd.CMD_QMARK: self.cmd_qmark,
             GDBCmd.CMD_G: self.read_registers,
@@ -24,7 +25,7 @@ class LibVMIStub(GDBStub):
             GDBCmd.CMD_BREAKIN: self.breakin
         }
 
-    def cmd_q(self, packet_data):
+    def gen_query_get(self, packet_data):
         if re.match(b'Supported', packet_data):
             reply = b'PacketSize=%x' % PACKET_SIZE
             pkt = GDBPacket(reply)
@@ -54,6 +55,18 @@ class LibVMIStub(GDBStub):
             # return current thread id
             self.send_packet(GDBPacket(b'QC%x' % self.cur_tid))
             return True
+        return False
+
+    def gen_query_set(self, packet_data):
+        if re.match(b'StartNoAckMode', packet_data):
+            self.no_ack = True
+            self.send_packet(GDBPacket(b'OK'))
+            # read last ack
+            c = self.sock.recv(1)
+            if c == b'+':
+                return True
+            else:
+                return False
         return False
 
     def cmd_H(self, packet_data):
