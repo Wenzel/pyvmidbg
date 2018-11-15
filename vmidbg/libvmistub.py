@@ -1,9 +1,10 @@
 import logging
 import re
 import struct
+import sys
 from binascii import hexlify, unhexlify
 
-from libvmi import LibvmiError
+from libvmi import LibvmiError, X86Reg, Registers
 
 from .gdbstub import GDBStub, GDBPacket, GDBCmd, GDBSignal, PACKET_SIZE
 
@@ -18,7 +19,8 @@ class LibVMIStub(GDBStub):
             GDBCmd.GEN_QUERY_SET: self.gen_query_set,
             GDBCmd.SET_THREAD_ID: self.set_thread_id,
             GDBCmd.TARGET_STATUS: self.target_status,
-            GDBCmd.GET_REGISTERS: self.get_registers,
+            GDBCmd.READ_REGISTERS: self.read_registers,
+            GDBCmd.WRITE_REGISTERS: self.write_registers,
             GDBCmd.DETACH: self.detach,
             GDBCmd.READ_MEMORY: self.read_memory,
             GDBCmd.WRITE_MEMORY: self.write_memory,
@@ -87,7 +89,7 @@ class LibVMIStub(GDBStub):
         self.send_packet(GDBPacket(msg))
         return True
 
-    def get_registers(self, packet_data):
+    def read_registers(self, packet_data):
         addr_width = self.ctx.vmi.get_address_width()
         if addr_width == 4:
             pack_fmt = '@I'
@@ -97,26 +99,63 @@ class LibVMIStub(GDBStub):
         # TODO VCPU 0
         regs = self.ctx.vmi.get_vcpuregs(0)
         gen_regs_32 = [
-            regs.x86.rax, regs.x86.rcx, regs.x86.rdx, regs.x86.rbx,
-            regs.x86.rsp, regs.x86.rbp, regs.x86.rsi, regs.x86.rdi, regs.x86.rip
+            X86Reg.RAX, X86Reg.RCX, X86Reg.RDX, X86Reg.RBX,
+            X86Reg.RSP, X86Reg.RBP, X86Reg.RSI, X86Reg.RDI, X86Reg.RIP
         ]
 
         gen_regs_64 = [
-            regs.x86.r9, regs.x86.r10, regs.x86.r11, regs.x86.r12,
-            regs.x86.r13, regs.x86.r14, regs.x86.r15
+            X86Reg.R9, X86Reg.R10, X86Reg.R11, X86Reg.R12,
+            X86Reg.R13, X86Reg.R14, X86Reg.R15
         ]
         # not available through libvmi
         seg_regs = [x+1 for x in range(0, 6)]
         # write general registers
-        msg = b''.join([hexlify(struct.pack(pack_fmt, r)) for r in gen_regs_32])
+        msg = b''.join([hexlify(struct.pack(pack_fmt, regs[r])) for r in gen_regs_32])
         if addr_width == 8:
-            msg += b''.join([hexlify(struct.pack(pack_fmt, r)) for r in gen_regs_64])
+            msg += b''.join([hexlify(struct.pack(pack_fmt, regs[r])) for r in gen_regs_64])
         # write eflags
-        msg += hexlify(struct.pack(pack_fmt, regs.x86.rflags))
+        msg += hexlify(struct.pack(pack_fmt, regs[X86Reg.RFLAGS]))
         # write segment registers
         msg += b''.join([hexlify(struct.pack(pack_fmt, r)) for r in seg_regs])
         self.send_packet(GDBPacket(msg))
         return True
+
+    def write_registers(self, packet_data):
+        addr_width = self.ctx.vmi.get_address_width()
+        if addr_width == 4:
+            pack_fmt = '@I'
+        else:
+            pack_fmt = '@Q'
+        gen_regs_32 = [
+            X86Reg.RAX, X86Reg.RCX, X86Reg.RDX, X86Reg.RBX,
+            X86Reg.RSP, X86Reg.RBP, X86Reg.RSI, X86Reg.RDI, X86Reg.RIP
+        ]
+
+        gen_regs_64 = [
+            X86Reg.R9, X86Reg.R10, X86Reg.R11, X86Reg.R12,
+            X86Reg.R13, X86Reg.R14, X86Reg.R15
+        ]
+
+        # TODO parse the entire buffer
+        # regs = Registers()
+        regs = self.ctx.vmi.get_vcpuregs(0)
+        iter = struct.iter_unpack(pack_fmt, unhexlify(packet_data))
+        for r in gen_regs_32:
+            regs[r], *rest = next(iter)
+        # 64 bits ?
+        if addr_width == 8:
+            for r in gen_regs_64:
+                regs[r], *rest = next(iter)
+        # eflags
+        regs[X86Reg.RFLAGS], *rest = next(iter)
+        # TODO segment registers
+        try:
+            self.ctx.vmi.set_vcpuregs(regs, 0)
+        except LibvmiError:
+            return False
+        else:
+            self.send_packet(GDBPacket(b'OK'))
+            return True
 
     def detach(self, packet_data):
         # detach
