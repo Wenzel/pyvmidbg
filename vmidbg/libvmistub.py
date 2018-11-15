@@ -1,7 +1,7 @@
 import logging
 import re
 import struct
-from binascii import hexlify
+from binascii import hexlify, unhexlify
 
 from libvmi import LibvmiError
 
@@ -21,6 +21,7 @@ class LibVMIStub(GDBStub):
             GDBCmd.GET_REGISTERS: self.get_registers,
             GDBCmd.DETACH: self.detach,
             GDBCmd.READ_MEMORY: self.read_memory,
+            GDBCmd.WRITE_MEMORY: self.write_memory,
             GDBCmd.CONTINUE: self.cont_execution,
             GDBCmd.BREAKIN: self.breakin
         }
@@ -132,9 +133,26 @@ class LibVMIStub(GDBStub):
             try:
                 buffer, bytes_read = self.ctx.vmi.read_va(addr, self.ctx.target_pid, length)
             except LibvmiError:
-                buffer = b''
-            self.send_packet(GDBPacket(hexlify(buffer)))
-            return True
+                return False
+            else:
+                self.send_packet(GDBPacket(hexlify(buffer)))
+                return True
+        return False
+
+    def write_memory(self, packet_data):
+        m = re.match(b'(?P<addr>.+),(?P<length>.+):(?P<data>.+)', packet_data)
+        if m:
+            addr = int(m.group('addr'), 16)
+            length = int(m.group('length'), 16)
+            data = unhexlify(m.group('data'))
+            # TODO partial write
+            try:
+                bytes_written = self.ctx.vmi.write_va(addr, self.ctx.target_pid, data)
+            except LibvmiError:
+                return False
+            else:
+                self.send_packet(GDBPacket(b'OK'))
+                return True
         return False
 
     def cont_execution(self, packet_data):
