@@ -41,13 +41,13 @@ class GDBSignal(Enum):
 class GDBCmd(Enum):
     GEN_QUERY_GET = 'q'
     GEN_QUERY_SET = 'Q'
-    CMD_CAP_H = 'H'
-    CMD_QMARK = '?'
-    CMD_G = 'g'
-    CMD_CAP_D = 'D'
-    CMD_M = 'm'
-    CMD_C = 'c'
-    CMD_BREAKIN = '\x03'
+    SET_THREAD_ID = 'H'
+    TARGET_STATUS = '?'
+    GET_REGISTERS = 'g'
+    DETACH = 'D'
+    READ_MEMORY = 'm'
+    CONTINUE = 'c'
+    BREAKIN = '\x03'
 
 
 class ChecksumError(Exception):

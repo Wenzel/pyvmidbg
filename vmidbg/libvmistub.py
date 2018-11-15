@@ -16,14 +16,15 @@ class LibVMIStub(GDBStub):
         self.cmd_to_handler = {
             GDBCmd.GEN_QUERY_GET: self.gen_query_get,
             GDBCmd.GEN_QUERY_SET: self.gen_query_set,
-            GDBCmd.CMD_CAP_H: self.cmd_H,
-            GDBCmd.CMD_QMARK: self.cmd_qmark,
-            GDBCmd.CMD_G: self.read_registers,
-            GDBCmd.CMD_CAP_D: self.cmd_D,
-            GDBCmd.CMD_M: self.read_memory,
-            GDBCmd.CMD_C: self.cont_execution,
-            GDBCmd.CMD_BREAKIN: self.breakin
+            GDBCmd.SET_THREAD_ID: self.set_thread_id,
+            GDBCmd.TARGET_STATUS: self.target_status,
+            GDBCmd.GET_REGISTERS: self.get_registers,
+            GDBCmd.DETACH: self.detach,
+            GDBCmd.READ_MEMORY: self.read_memory,
+            GDBCmd.CONTINUE: self.cont_execution,
+            GDBCmd.BREAKIN: self.breakin
         }
+
 
     def gen_query_get(self, packet_data):
         if re.match(b'Supported', packet_data):
@@ -69,7 +70,7 @@ class LibVMIStub(GDBStub):
                 return False
         return False
 
-    def cmd_H(self, packet_data):
+    def set_thread_id(self, packet_data):
         m = re.match(b'(?P<op>[cg])(?P<tid>([0-9a-f])+|-1)', packet_data)
         if m:
             op = m.group('op')
@@ -80,12 +81,12 @@ class LibVMIStub(GDBStub):
             return True
         return False
 
-    def cmd_qmark(self, packet_data):
+    def target_status(self, packet_data):
         msg = b'S%.2x' % GDBSignal.TRAP.value
         self.send_packet(GDBPacket(msg))
         return True
 
-    def read_registers(self, packet_data):
+    def get_registers(self, packet_data):
         addr_width = self.ctx.vmi.get_address_width()
         if addr_width == 4:
             pack_fmt = '@I'
@@ -116,7 +117,7 @@ class LibVMIStub(GDBStub):
         self.send_packet(GDBPacket(msg))
         return True
 
-    def cmd_D(self, packet_data):
+    def detach(self, packet_data):
         # detach
         self.attached = False
         self.send_packet(GDBPacket(b'OK'))
@@ -143,6 +144,7 @@ class LibVMIStub(GDBStub):
             addr = int(m.group('addr'), 16)
         # TODO resume execution at addr
         self.ctx.vmi.resume_vm()
+        self.send_packet(GDBPacket(b'OK'))
         return True
 
     def breakin(self, packet_data):
