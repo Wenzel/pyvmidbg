@@ -17,9 +17,9 @@ Options:
 import logging
 from docopt import docopt
 
-from .gdbserver import GDBServer
-from .libvmistub import LibVMIStub
-from .debugcontext import DebugContext
+from vmidbg.gdbserver import GDBServer
+from vmidbg.libvmistub import LibVMIStub
+from vmidbg.debugcontext import DebugContext
 
 
 def main():

@@ -20,8 +20,9 @@ setup(
     url='https://github.com/Wenzel/pyvmidbg',
     setup_requires=[''],
     install_requires=['docopt', 'libvmi'],
+    tests_require=["pytest", "pytest-pep8", "libvirt-python"],
     packages=['vmidbg'],
     entry_points={
-        'console_scripts': ['vmidbg=vmidbg.vmidbg:main'],
+        'console_scripts': ['vmidbg=vmidbg.main:main'],
     }
 )
