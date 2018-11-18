@@ -141,13 +141,19 @@ class LibVMIStub(GDBStub):
         regs = self.ctx.vmi.get_vcpuregs(0)
         iter = struct.iter_unpack(pack_fmt, unhexlify(packet_data))
         for r in gen_regs_32:
-            regs[r], *rest = next(iter)
+            value, *rest = next(iter)
+            logging.debug('%s: %x', r.name, value)
+            regs[r] = value
         # 64 bits ?
         if addr_width == 8:
             for r in gen_regs_64:
-                regs[r], *rest = next(iter)
+                value, *rest = next(iter)
+                logging.debug('%s: %x', r.name, value)
+                regs[r] = value
         # eflags
-        regs[X86Reg.RFLAGS], *rest = next(iter)
+        value, *rest = next(iter)
+        logging.debug('%s: %x', X86Reg.RFLAGS.name, value)
+        regs[X86Reg.RFLAGS] = value
         # TODO segment registers
         try:
             self.ctx.vmi.set_vcpuregs(regs, 0)
@@ -160,6 +166,10 @@ class LibVMIStub(GDBStub):
     def detach(self, packet_data):
         # detach
         self.attached = False
+        try:
+            self.ctx.vmi.resume_vm()
+        except LibvmiError:
+            pass
         self.send_packet(GDBPacket(b'OK'))
         return True
 
