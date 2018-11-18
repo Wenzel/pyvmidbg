@@ -216,4 +216,6 @@ class LibVMIStub(GDBStub):
 
     def breakin(self, packet_data):
         self.ctx.attach()
+        msg = b'S%.2x' % GDBSignal.TRAP.value
+        self.send_packet(GDBPacket(msg))
         return True
