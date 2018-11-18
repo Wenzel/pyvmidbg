@@ -5,6 +5,7 @@ import sys
 from binascii import hexlify, unhexlify
 
 from libvmi import LibvmiError, X86Reg, Registers
+from libvmi.event import SingleStepEvent
 
 from .gdbstub import GDBStub, GDBPacket, GDBCmd, GDBSignal, PACKET_SIZE
 
@@ -25,6 +26,7 @@ class LibVMIStub(GDBStub):
             GDBCmd.READ_MEMORY: self.read_memory,
             GDBCmd.WRITE_MEMORY: self.write_memory,
             GDBCmd.CONTINUE: self.cont_execution,
+            GDBCmd.SINGLESTEP: self.singlestep,
             GDBCmd.BREAKIN: self.breakin
         }
 
@@ -205,13 +207,45 @@ class LibVMIStub(GDBStub):
         return False
 
     def cont_execution(self, packet_data):
+        # TODO resume execution at addr
         addr = None
         m = re.match(b'(?P<addr>.+)', packet_data)
         if m:
             addr = int(m.group('addr'), 16)
-        # TODO resume execution at addr
+            return False
         self.ctx.vmi.resume_vm()
         self.send_packet(GDBPacket(b'OK'))
+        return True
+
+    def singlestep(self, packet_data):
+        # TODO resume execution at addr
+        addr = None
+        m = re.match(b'(?P<addr>.+)', packet_data)
+        if m:
+            addr = int(m.group('addr'), 16)
+            return False
+
+        cb_data = {
+            'interrupted': False
+        }
+
+        def cb_on_sstep(vmi, event):
+            self.log.debug('singlestepping')
+            vmi.pause_vm()
+            cb_data['interrupted'] = True
+
+        num_vcpus = self.ctx.vmi.get_num_vcpus()
+        ss_event = SingleStepEvent(range(num_vcpus), cb_on_sstep)
+        self.ctx.vmi.register_event(ss_event)
+
+        self.ctx.vmi.resume_vm()
+        while not cb_data['interrupted']:
+            self.ctx.vmi.listen(1000)
+
+        self.ctx.vmi.listen(0)
+        self.ctx.vmi.clear_event(ss_event)
+        msg = b'S%.2x' % GDBSignal.TRAP.value
+        self.send_packet(GDBPacket(msg))
         return True
 
     def breakin(self, packet_data):
