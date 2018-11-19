@@ -109,7 +109,7 @@ class GDBStub():
                 # create a normal packet to let stub call a handler
                 return b'\x03'
             # packet ?
-            m = re.match(b'\$(?P<data>.*)#(?P<checksum>..)', self.buffer)
+            m = re.match(b'\$(?P<data>.*?)#(?P<checksum>..)', self.buffer)
             if m:
                 packet_data = m.group('data')
                 packet_checksum = int(m.group('checksum'), 16)
