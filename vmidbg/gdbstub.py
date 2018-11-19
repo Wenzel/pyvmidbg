@@ -125,7 +125,10 @@ class GDBStub():
             raise ChecksumError('invalid checksum received')
 
     def send_msg(self, msg):
-        self.log.debug('send: %s', msg)
+        if len(msg) > 70:
+            self.log.debug('send: %s...', msg[:70])
+        else:
+            self.log.debug('send: %s', msg)
         self.sock.sendall(msg)
 
     @expect_ack
