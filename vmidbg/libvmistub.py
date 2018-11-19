@@ -58,7 +58,7 @@ class LibVMIStub(GDBStub):
         doctype = '<!DOCTYPE memory-map ' \
                   'PUBLIC "+//IDN gnu.org//DTD GDB Memory Map V1.0//EN"' \
                   ' "http://sourceware.org/gdb/gdb-memory-map.dtd">'
-        xml = etree.tostring(root, xml_declaration=True, doctype=doctype)
+        xml = etree.tostring(root, xml_declaration=True, doctype=doctype, encoding='UTF-8')
         return xml
 
     def set_supported_features(self, packet_data):
