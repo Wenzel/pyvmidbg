@@ -29,11 +29,44 @@ class LibVMIStub(GDBStub):
             GDBCmd.SINGLESTEP: self.singlestep,
             GDBCmd.BREAKIN: self.breakin
         }
+        self.features = {
+            b'multiprocess': False,
+            b'swbreak': True,
+            b'hwbreak': False,
+            b'qRelocInsn': False,
+            b'fork-events': False,
+            b'vfork-events': False,
+            b'exec-events': False,
+            b'vContSupported': False,
+            b'QThreadEvents': False,
+            b'no-resumed': False,
+            b'xmlRegisters': False,
+        }
 
+    def set_supported_features(self, packet_data):
+        # split string and get features in a list
+        # trash 'Supported
+        req_features = re.split(b'[:|;]', packet_data)[1:]
+        for f in req_features:
+            if f[-1:] in [b'+', b'-']:
+                name = f[:-1]
+                value = True if f[-1:] == b'+' else False
+            else:
+                groups = f.split(b'=')
+                name = groups[0]
+                value =  groups[1]
+            # TODO check supported features
+        reply_msg = b'PacketSize=%x' % PACKET_SIZE
+        for name, value in self.features.items():
+            if isinstance(value, bool):
+                reply_msg += b';%s%s' % (name, b'+' if value else b'-')
+            else:
+                reply_msg += b';%s=%s' % (name, value)
+        return reply_msg
 
     def gen_query_get(self, packet_data):
         if re.match(b'Supported', packet_data):
-            reply = b'PacketSize=%x' % PACKET_SIZE
+            reply = self.set_supported_features(packet_data)
             pkt = GDBPacket(reply)
             self.send_packet(pkt)
             return True
