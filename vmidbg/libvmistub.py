@@ -41,6 +41,7 @@ class LibVMIStub(GDBStub):
             b'QThreadEvents': False,
             b'no-resumed': False,
             b'xmlRegisters': False,
+            b'qXfer:memory-map:read': True
         }
 
     def set_supported_features(self, packet_data):
