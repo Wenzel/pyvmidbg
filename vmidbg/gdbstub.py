@@ -84,7 +84,8 @@ class GDBStub():
         self.buffer = b''
         self.last_pkt = None
         self.cmd_to_handler = {}
-        self.cur_tid = 0
+        self.gen_tid = 0
+        self.cont_tid = 0
 
     def read_packet(self):
         epoll = select.epoll()

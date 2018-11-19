@@ -92,7 +92,7 @@ class LibVMIStub(GDBStub):
             return True
         if re.match(b'C', packet_data):
             # return current thread id
-            self.send_packet(GDBPacket(b'QC%x' % self.cur_tid))
+            self.send_packet(GDBPacket(b'QC%x' % self.gen_tid))
             return True
         return False
 
@@ -113,7 +113,7 @@ class LibVMIStub(GDBStub):
         if m:
             op = m.group('op')
             tid = int(m.group('tid'), 16)
-            self.cur_tid = tid
+            self.cont_tid = tid
             # TODO op, Enn
             self.send_packet(GDBPacket(b'OK'))
             return True
