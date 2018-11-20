@@ -41,6 +41,7 @@ class DebugContext:
 
     def __exit__(self, type, value, traceback):
         try:
+            logging.info('resuming VM execution')
             self.vmi.resume_vm()
         except LibvmiError:
             # already in running state
