@@ -6,9 +6,12 @@ from lxml import etree
 from binascii import hexlify, unhexlify
 
 from libvmi import LibvmiError, X86Reg, Registers
-from libvmi.event import SingleStepEvent
+from libvmi.event import SingleStepEvent, IntEvent
 
 from .gdbstub import GDBStub, GDBPacket, GDBCmd, GDBSignal, PACKET_SIZE
+
+
+SW_BREAKPOINT = b'\xcc'
 
 
 class LibVMIStub(GDBStub):
@@ -29,6 +32,7 @@ class LibVMIStub(GDBStub):
             GDBCmd.WRITE_DATA_MEMORY: self.write_data_memory,
             GDBCmd.CONTINUE: self.cont_execution,
             GDBCmd.SINGLESTEP: self.singlestep,
+            GDBCmd.INSERT_XPOINT: self.insert_xpoint,
             GDBCmd.BREAKIN: self.breakin
         }
         self.features = {
@@ -46,6 +50,8 @@ class LibVMIStub(GDBStub):
             b'xmlRegisters': False,
             b'qXfer:memory-map:read': True
         }
+        # [addr] -> [saved_opcode]
+        self.saved_op = {}
 
     @lru_cache(maxsize=None)
     def get_memory_map_xml(self):
@@ -330,8 +336,47 @@ class LibVMIStub(GDBStub):
         self.send_packet(GDBPacket(msg))
         return True
 
+    def insert_xpoint(self, packet_data):
+        # ‘Z type,addr,kind’
+        m = re.match(b'(?P<type>[0-9]),(?P<addr>.+),(?P<kind>.+)', packet_data)
+        if not m:
+            return False
+        btype = int(m.group('type'))
+        addr = int(m.group('addr'), 16)
+        # kind -> size of breakpoint
+        kind = int(m.group('kind'), 16)
+        if btype == 0:
+            # software breakpoint
+            # read old opcode
+            try:
+                buffer, bytes_read = self.ctx.vmi.read_va(addr, self.ctx.target_pid, kind)
+            except LibvmiError:
+                return False
+            if bytes_read < kind:
+                # read error
+                return False
+            self.saved_op[addr] = buffer
+            # write breakpoint
+            try:
+                bytes_written = self.ctx.vmi.write_va(addr, self.ctx.target_pid, SW_BREAKPOINT)
+            except LibvmiError:
+                return False
+            if bytes_written < kind:
+                # write error
+                self.saved_op.pop(addr)
+                return False
+            # register interrupt event
+            int_event = IntEvent(self.cb_on_int3)
+            self.ctx.vmi.register_event(int_event)
+            self.send_packet(GDBPacket(b'OK'))
+            return True
+        return False
+
     def breakin(self, packet_data):
         self.ctx.attach()
         msg = b'S%.2x' % GDBSignal.TRAP.value
         self.send_packet(GDBPacket(msg))
         return True
+
+    def cb_on_int3(self, vmi, event):
+        self.log.debug('interrupt: %s', event.to_dict())
