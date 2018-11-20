@@ -47,7 +47,7 @@ class GDBCmd(Enum):
     WRITE_REGISTERS = 'G'
     DETACH = 'D'
     READ_MEMORY = 'm'
-    WRITE_MEMORY= 'M'
+    WRITE_MEMORY = 'M'
     CONTINUE = 'c'
     SINGLESTEP = 's'
     BREAKIN = '\x03'

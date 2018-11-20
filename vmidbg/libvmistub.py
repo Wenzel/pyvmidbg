@@ -72,7 +72,7 @@ class LibVMIStub(GDBStub):
             else:
                 groups = f.split(b'=')
                 name = groups[0]
-                value =  groups[1]
+                value = groups[1]
             # TODO check supported features
         reply_msg = b'PacketSize=%x' % PACKET_SIZE
         for name, value in self.features.items():
