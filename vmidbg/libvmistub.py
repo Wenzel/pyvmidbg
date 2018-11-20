@@ -34,6 +34,7 @@ class LibVMIStub(GDBStub):
             GDBCmd.WRITE_DATA_MEMORY: self.write_data_memory,
             GDBCmd.CONTINUE: self.cont_execution,
             GDBCmd.SINGLESTEP: self.singlestep,
+            GDBCmd.REMOVE_XPOINT: self.remove_xpoint,
             GDBCmd.INSERT_XPOINT: self.insert_xpoint,
             GDBCmd.BREAKIN: self.breakin
         }
@@ -53,9 +54,13 @@ class LibVMIStub(GDBStub):
             b'qXfer:memory-map:read': True
         }
         # [addr] -> [saved_opcode]
-        self.saved_op = {}
+        self.addr_to_op = {}
         self.stop_listen = threading.Event()
         self.pool = ThreadPoolExecutor(max_workers=1)
+        # register some events
+        # register interrupt event
+        self.int_event = IntEvent(self.cb_on_int3)
+        self.ctx.vmi.register_event(self.int_event)
 
     @lru_cache(maxsize=None)
     def get_memory_map_xml(self):
@@ -343,6 +348,23 @@ class LibVMIStub(GDBStub):
         self.send_packet(GDBPacket(msg))
         return True
 
+    def remove_xpoint(self, packet_data):
+        # ‘z type,addr,kind’
+        m = re.match(b'(?P<type>[0-9]),(?P<addr>.+),(?P<kind>.+)', packet_data)
+        if not m:
+            return False
+        btype = int(m.group('type'))
+        addr = int(m.group('addr'), 16)
+        # kind -> size of breakpoint
+        kind = int(m.group('kind'), 16)
+        if btype == 0:
+            # software breakpoint
+            self.restore_opcode(addr)
+            self.addr_to_op.pop(addr)
+            self.send_packet(GDBPacket(b'OK'))
+            return True
+        return False
+
     def insert_xpoint(self, packet_data):
         # ‘Z type,addr,kind’
         m = re.match(b'(?P<type>[0-9]),(?P<addr>.+),(?P<kind>.+)', packet_data)
@@ -362,7 +384,7 @@ class LibVMIStub(GDBStub):
             if bytes_read < kind:
                 # read error
                 return False
-            self.saved_op[addr] = buffer
+            self.addr_to_op[addr] = buffer
             # write breakpoint
             try:
                 bytes_written = self.ctx.vmi.write_va(addr, self.ctx.target_pid, SW_BREAKPOINT)
@@ -370,11 +392,8 @@ class LibVMIStub(GDBStub):
                 return False
             if bytes_written < kind:
                 # write error
-                self.saved_op.pop(addr)
+                self.addr_to_op.pop(addr)
                 return False
-            # register interrupt event
-            int_event = IntEvent(self.cb_on_int3)
-            self.ctx.vmi.register_event(int_event)
             self.send_packet(GDBPacket(b'OK'))
             return True
         return False
@@ -392,7 +411,7 @@ class LibVMIStub(GDBStub):
         # set reinjection behavior
         event.reinject = 0
         addr = event.cffi_event.x86_regs.rip
-        if not addr in self.saved_op.keys():
+        if not addr in self.addr_to_op.keys():
             # not our breakpoint, reinject
             event.reinject = 1
             return EventResponse.NONE
@@ -414,7 +433,7 @@ class LibVMIStub(GDBStub):
 
     def restore_opcode(self, addr):
         try:
-            bytes_written = self.ctx.vmi.write_va(addr, self.ctx.target_pid, self.saved_op[addr])
+            bytes_written = self.ctx.vmi.write_va(addr, self.ctx.target_pid, self.addr_to_op[addr])
         except LibvmiError as e:
             raise RuntimeError('Impossible to restore opcode') from e
 
