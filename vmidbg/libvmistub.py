@@ -88,27 +88,7 @@ class LibVMIStub(GDBStub):
         xml = etree.tostring(root, xml_declaration=True, doctype=doctype, encoding='UTF-8')
         return xml
 
-    def set_supported_features(self, packet_data):
-        # split string and get features in a list
-        # trash 'Supported
-        req_features = re.split(b'[:|;]', packet_data)[1:]
-        for f in req_features:
-            if f[-1:] in [b'+', b'-']:
-                name = f[:-1]
-                value = True if f[-1:] == b'+' else False
-            else:
-                groups = f.split(b'=')
-                name = groups[0]
-                value = groups[1]
-            # TODO check supported features
-        reply_msg = b'PacketSize=%x' % PACKET_SIZE
-        for name, value in self.features.items():
-            if isinstance(value, bool):
-                reply_msg += b';%s%s' % (name, b'+' if value else b'-')
-            else:
-                reply_msg += b';%s=%s' % (name, value)
-        return reply_msg
-
+# commands
     def gen_query_get(self, packet_data):
         if re.match(b'Supported', packet_data):
             reply = self.set_supported_features(packet_data)
@@ -374,7 +354,7 @@ class LibVMIStub(GDBStub):
         kind = int(m.group('kind'), 16)
         if btype == 0:
             # software breakpoint
-            self.restore_opcode(addr)
+            self.toggle_swbreak(addr, False)
             self.addr_to_op.pop(addr)
             self.send_packet(GDBPacket(b'OK'))
             return True
@@ -402,7 +382,7 @@ class LibVMIStub(GDBStub):
             self.addr_to_op[addr] = buffer
             # write breakpoint
             try:
-                self.place_swbreakpoint(addr)
+                self.toggle_swbreak(addr, True)
             except LibvmiError:
                 # write error
                 self.addr_to_op.pop(addr)
@@ -419,20 +399,21 @@ class LibVMIStub(GDBStub):
         self.send_packet(GDBPacket(msg))
         return True
 
+# callbacks
     def cb_on_sstep_recoil(self, vmi, event):
         self.log.debug('cb_on_sstep')
         # restore software breakpoint
-        self.place_swbreakpoint(self.last_addr_wrong_swbreak)
+        self.toggle_swbreak(self.last_addr_wrong_swbreak, True)
         self.last_addr_wrong_swbreak = None
         # done singlestepping
         return EventResponse.TOGGLE_SINGLESTEP
 
     def cb_on_int3(self, vmi, event):
-        self.log.debug('interrupt: %s', event.to_dict())
+        self.log.debug('cb_on_int3')
         # set reinjection behavior
         event.reinject = 0
         addr = event.cffi_event.x86_regs.rip
-        if not addr in self.addr_to_op.keys():
+        if addr not in self.addr_to_op.keys():
             # not our breakpoint, reinject
             event.reinject = 1
             return EventResponse.NONE
@@ -444,7 +425,7 @@ class LibVMIStub(GDBStub):
             # store current address to restore breakpoint in cb_sstep_recoil
             self.last_addr_wrong_swbreak = addr
             # restore original opcode
-            self.restore_opcode(addr)
+            self.toggle_swbreak(addr, False)
             # prepare to singlestep
             return EventResponse.TOGGLE_SINGLESTEP
         else:
@@ -454,17 +435,37 @@ class LibVMIStub(GDBStub):
             # report swbreak stop to client
             self.send_packet_noack(GDBPacket(b'T%.2xswbreak:;' % GDBSignal.TRAP.value))
 
-    def place_swbreakpoint(self, addr):
-        bytes_written = self.ctx.vmi.write_va(addr, self.ctx.target_pid, SW_BREAKPOINT)
-        if bytes_written < len(SW_BREAKPOINT):
-            raise LibvmiError
-
-    def restore_opcode(self, addr):
-        try:
-            bytes_written = self.ctx.vmi.write_va(addr, self.ctx.target_pid, self.addr_to_op[addr])
-        except LibvmiError as e:
-            raise RuntimeError('Impossible to restore opcode') from e
+# helpers
+    def set_supported_features(self, packet_data):
+        # split string and get features in a list
+        # trash 'Supported
+        req_features = re.split(b'[:|;]', packet_data)[1:]
+        for f in req_features:
+            if f[-1:] in [b'+', b'-']:
+                name = f[:-1]
+                value = True if f[-1:] == b'+' else False
+            else:
+                groups = f.split(b'=')
+                name = groups[0]
+                value = groups[1]
+            # TODO check supported features
+        reply_msg = b'PacketSize=%x' % PACKET_SIZE
+        for name, value in self.features.items():
+            if isinstance(value, bool):
+                reply_msg += b';%s%s' % (name, b'+' if value else b'-')
+            else:
+                reply_msg += b';%s=%s' % (name, value)
+        return reply_msg
 
     def listen_events(self):
         while not self.stop_listen.is_set():
             self.ctx.vmi.listen(2000)
+
+    def toggle_swbreak(self, addr, set):
+        if set:
+            buffer = SW_BREAKPOINT
+        else:
+            buffer = self.addr_to_op[addr]
+        bytes_written = self.ctx.vmi.write_va(addr, self.ctx.target_pid, buffer)
+        if bytes_written < len(buffer):
+            raise LibvmiError
