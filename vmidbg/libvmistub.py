@@ -1,14 +1,19 @@
 import logging
 import re
 import struct
+import threading
 from functools import lru_cache
 from lxml import etree
 from binascii import hexlify, unhexlify
+from concurrent.futures import ThreadPoolExecutor
 
 from libvmi import LibvmiError, X86Reg, Registers
-from libvmi.event import SingleStepEvent
+from libvmi.event import EventResponse, SingleStepEvent, IntEvent
 
 from .gdbstub import GDBStub, GDBPacket, GDBCmd, GDBSignal, PACKET_SIZE
+from .debugcontext import dtb_to_pname
+
+SW_BREAKPOINT = b'\xcc'
 
 
 class LibVMIStub(GDBStub):
@@ -29,6 +34,8 @@ class LibVMIStub(GDBStub):
             GDBCmd.WRITE_DATA_MEMORY: self.write_data_memory,
             GDBCmd.CONTINUE: self.cont_execution,
             GDBCmd.SINGLESTEP: self.singlestep,
+            GDBCmd.REMOVE_XPOINT: self.remove_xpoint,
+            GDBCmd.INSERT_XPOINT: self.insert_xpoint,
             GDBCmd.BREAKIN: self.breakin
         }
         self.features = {
@@ -46,6 +53,24 @@ class LibVMIStub(GDBStub):
             b'xmlRegisters': False,
             b'qXfer:memory-map:read': True
         }
+        # [addr] -> [saved_opcode]
+        self.addr_to_op = {}
+        self.stop_listen = threading.Event()
+        self.pool = ThreadPoolExecutor(max_workers=1)
+        # register some events
+        # register interrupt event
+        self.int_event = IntEvent(self.cb_on_int3)
+        self.ctx.vmi.register_event(self.int_event)
+        # single step event to handle wrong hits by sw breakpoints
+        # enabled via EventResponse.TOGGLE_SINGLESTEP
+        num_vcpus = self.ctx.vmi.get_num_vcpus()
+        self.ss_event_recoil = SingleStepEvent(range(num_vcpus), self.cb_on_sstep_recoil, enable=False)
+        self.ctx.vmi.register_event(self.ss_event_recoil)
+        # store the last addr where a swbreakpoint was hit
+        # but it was not our targeted process
+        # used in cb_on_sstep_recoil to restore the breakpoint after
+        # the recoil
+        self.last_addr_wrong_swbreak = None
 
     @lru_cache(maxsize=None)
     def get_memory_map_xml(self):
@@ -63,27 +88,7 @@ class LibVMIStub(GDBStub):
         xml = etree.tostring(root, xml_declaration=True, doctype=doctype, encoding='UTF-8')
         return xml
 
-    def set_supported_features(self, packet_data):
-        # split string and get features in a list
-        # trash 'Supported
-        req_features = re.split(b'[:|;]', packet_data)[1:]
-        for f in req_features:
-            if f[-1:] in [b'+', b'-']:
-                name = f[:-1]
-                value = True if f[-1:] == b'+' else False
-            else:
-                groups = f.split(b'=')
-                name = groups[0]
-                value = groups[1]
-            # TODO check supported features
-        reply_msg = b'PacketSize=%x' % PACKET_SIZE
-        for name, value in self.features.items():
-            if isinstance(value, bool):
-                reply_msg += b';%s%s' % (name, b'+' if value else b'-')
-            else:
-                reply_msg += b';%s=%s' % (name, value)
-        return reply_msg
-
+# commands
     def gen_query_get(self, packet_data):
         if re.match(b'Supported', packet_data):
             reply = self.set_supported_features(packet_data)
@@ -297,6 +302,9 @@ class LibVMIStub(GDBStub):
             return False
         self.ctx.vmi.resume_vm()
         self.send_packet(GDBPacket(b'OK'))
+        # start listening on VMI events
+        self.stop_listen.clear()
+        future = self.pool.submit(self.listen_events)
         return True
 
     def singlestep(self, packet_data):
@@ -315,6 +323,8 @@ class LibVMIStub(GDBStub):
             self.log.debug('singlestepping')
             vmi.pause_vm()
             cb_data['interrupted'] = True
+        # unregister sstep_recoil
+        self.ctx.vmi.clear_event(self.ss_event_recoil)
 
         num_vcpus = self.ctx.vmi.get_num_vcpus()
         ss_event = SingleStepEvent(range(num_vcpus), cb_on_sstep)
@@ -326,12 +336,136 @@ class LibVMIStub(GDBStub):
 
         self.ctx.vmi.listen(0)
         self.ctx.vmi.clear_event(ss_event)
+
+        # reregister sstep_recoil
+        self.ctx.vmi.register_event(self.ss_event_recoil)
         msg = b'S%.2x' % GDBSignal.TRAP.value
         self.send_packet(GDBPacket(msg))
         return True
 
+    def remove_xpoint(self, packet_data):
+        # ‘z type,addr,kind’
+        m = re.match(b'(?P<type>[0-9]),(?P<addr>.+),(?P<kind>.+)', packet_data)
+        if not m:
+            return False
+        btype = int(m.group('type'))
+        addr = int(m.group('addr'), 16)
+        # kind -> size of breakpoint
+        kind = int(m.group('kind'), 16)
+        if btype == 0:
+            # software breakpoint
+            self.toggle_swbreak(addr, False)
+            self.addr_to_op.pop(addr)
+            self.send_packet(GDBPacket(b'OK'))
+            return True
+        return False
+
+    def insert_xpoint(self, packet_data):
+        # ‘Z type,addr,kind’
+        m = re.match(b'(?P<type>[0-9]),(?P<addr>.+),(?P<kind>.+)', packet_data)
+        if not m:
+            return False
+        btype = int(m.group('type'))
+        addr = int(m.group('addr'), 16)
+        # kind -> size of breakpoint
+        kind = int(m.group('kind'), 16)
+        if btype == 0:
+            # software breakpoint
+            # read old opcode
+            try:
+                buffer, bytes_read = self.ctx.vmi.read_va(addr, self.ctx.target_pid, kind)
+            except LibvmiError:
+                return False
+            if bytes_read < kind:
+                # read error
+                return False
+            self.addr_to_op[addr] = buffer
+            # write breakpoint
+            try:
+                self.toggle_swbreak(addr, True)
+            except LibvmiError:
+                # write error
+                self.addr_to_op.pop(addr)
+                return False
+            self.send_packet(GDBPacket(b'OK'))
+            return True
+        return False
+
     def breakin(self, packet_data):
+        # stop event thread
+        self.stop_listen.set()
         self.ctx.attach()
         msg = b'S%.2x' % GDBSignal.TRAP.value
         self.send_packet(GDBPacket(msg))
         return True
+
+# callbacks
+    def cb_on_sstep_recoil(self, vmi, event):
+        self.log.debug('cb_on_sstep')
+        # restore software breakpoint
+        self.toggle_swbreak(self.last_addr_wrong_swbreak, True)
+        self.last_addr_wrong_swbreak = None
+        # done singlestepping
+        return EventResponse.TOGGLE_SINGLESTEP
+
+    def cb_on_int3(self, vmi, event):
+        self.log.debug('cb_on_int3')
+        # set reinjection behavior
+        event.reinject = 0
+        addr = event.cffi_event.x86_regs.rip
+        if addr not in self.addr_to_op.keys():
+            # not our breakpoint, reinject
+            event.reinject = 1
+            return EventResponse.NONE
+        # check our targeted process
+        dtb = event.cffi_event.x86_regs.cr3
+        if dtb != self.ctx.target_dtb:
+            pname = dtb_to_pname(vmi, dtb)
+            logging.debug('wrong process: %s', pname)
+            # store current address to restore breakpoint in cb_sstep_recoil
+            self.last_addr_wrong_swbreak = addr
+            # restore original opcode
+            self.toggle_swbreak(addr, False)
+            # prepare to singlestep
+            return EventResponse.TOGGLE_SINGLESTEP
+        else:
+            # pause
+            self.ctx.vmi.pause_vm()
+            self.stop_listen.set()
+            # report swbreak stop to client
+            self.send_packet_noack(GDBPacket(b'T%.2xswbreak:;' % GDBSignal.TRAP.value))
+
+# helpers
+    def set_supported_features(self, packet_data):
+        # split string and get features in a list
+        # trash 'Supported
+        req_features = re.split(b'[:|;]', packet_data)[1:]
+        for f in req_features:
+            if f[-1:] in [b'+', b'-']:
+                name = f[:-1]
+                value = True if f[-1:] == b'+' else False
+            else:
+                groups = f.split(b'=')
+                name = groups[0]
+                value = groups[1]
+            # TODO check supported features
+        reply_msg = b'PacketSize=%x' % PACKET_SIZE
+        for name, value in self.features.items():
+            if isinstance(value, bool):
+                reply_msg += b';%s%s' % (name, b'+' if value else b'-')
+            else:
+                reply_msg += b';%s=%s' % (name, value)
+        return reply_msg
+
+    def listen_events(self):
+        while not self.stop_listen.is_set():
+            self.ctx.vmi.listen(2000)
+
+    def toggle_swbreak(self, addr, set):
+        if set:
+            buffer = SW_BREAKPOINT
+        else:
+            buffer = self.addr_to_op[addr]
+        bytes_written = self.ctx.vmi.write_va(addr, self.ctx.target_pid, buffer)
+        if bytes_written < len(buffer):
+            raise LibvmiError

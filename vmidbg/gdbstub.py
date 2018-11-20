@@ -51,6 +51,8 @@ class GDBCmd(Enum):
     WRITE_DATA_MEMORY = 'X'
     CONTINUE = 'c'
     SINGLESTEP = 's'
+    REMOVE_XPOINT = 'z'
+    INSERT_XPOINT = 'Z'
     BREAKIN = '\x03'
 
 
@@ -134,6 +136,9 @@ class GDBStub():
 
     @expect_ack
     def send_packet(self, pkt):
+        self.send_msg(pkt.to_bytes())
+
+    def send_packet_noack(self, pkt):
         self.send_msg(pkt.to_bytes())
 
     def handle_rsp(self):
