@@ -61,6 +61,16 @@ class LibVMIStub(GDBStub):
         # register interrupt event
         self.int_event = IntEvent(self.cb_on_int3)
         self.ctx.vmi.register_event(self.int_event)
+        # single step event to handle wrong hits by sw breakpoints
+        # enabled via EventResponse.TOGGLE_SINGLESTEP
+        num_vcpus = self.ctx.vmi.get_num_vcpus()
+        self.ss_event_recoil = SingleStepEvent(range(num_vcpus), self.cb_on_sstep_recoil, enable=False)
+        self.ctx.vmi.register_event(self.ss_event_recoil)
+        # store the last addr where a swbreakpoint was hit
+        # but it was not our targeted process
+        # used in cb_on_sstep_recoil to restore the breakpoint after
+        # the recoil
+        self.last_addr_wrong_swbreak = None
 
     @lru_cache(maxsize=None)
     def get_memory_map_xml(self):
@@ -333,6 +343,8 @@ class LibVMIStub(GDBStub):
             self.log.debug('singlestepping')
             vmi.pause_vm()
             cb_data['interrupted'] = True
+        # unregister sstep_recoil
+        self.ctx.vmi.clear_event(self.ss_event_recoil)
 
         num_vcpus = self.ctx.vmi.get_num_vcpus()
         ss_event = SingleStepEvent(range(num_vcpus), cb_on_sstep)
@@ -344,6 +356,9 @@ class LibVMIStub(GDBStub):
 
         self.ctx.vmi.listen(0)
         self.ctx.vmi.clear_event(ss_event)
+
+        # reregister sstep_recoil
+        self.ctx.vmi.register_event(self.ss_event_recoil)
         msg = b'S%.2x' % GDBSignal.TRAP.value
         self.send_packet(GDBPacket(msg))
         return True
@@ -387,10 +402,8 @@ class LibVMIStub(GDBStub):
             self.addr_to_op[addr] = buffer
             # write breakpoint
             try:
-                bytes_written = self.ctx.vmi.write_va(addr, self.ctx.target_pid, SW_BREAKPOINT)
+                self.place_swbreakpoint(addr)
             except LibvmiError:
-                return False
-            if bytes_written < kind:
                 # write error
                 self.addr_to_op.pop(addr)
                 return False
@@ -406,6 +419,14 @@ class LibVMIStub(GDBStub):
         self.send_packet(GDBPacket(msg))
         return True
 
+    def cb_on_sstep_recoil(self, vmi, event):
+        self.log.debug('cb_on_sstep')
+        # restore software breakpoint
+        self.place_swbreakpoint(self.last_addr_wrong_swbreak)
+        self.last_addr_wrong_swbreak = None
+        # done singlestepping
+        return EventResponse.TOGGLE_SINGLESTEP
+
     def cb_on_int3(self, vmi, event):
         self.log.debug('interrupt: %s', event.to_dict())
         # set reinjection behavior
@@ -420,6 +441,8 @@ class LibVMIStub(GDBStub):
         if dtb != self.ctx.target_dtb:
             pname = dtb_to_pname(vmi, dtb)
             logging.debug('wrong process: %s', pname)
+            # store current address to restore breakpoint in cb_sstep_recoil
+            self.last_addr_wrong_swbreak = addr
             # restore original opcode
             self.restore_opcode(addr)
             # prepare to singlestep
@@ -430,6 +453,11 @@ class LibVMIStub(GDBStub):
             self.stop_listen.set()
             # report swbreak stop to client
             self.send_packet_noack(GDBPacket(b'T%.2xswbreak:;' % GDBSignal.TRAP.value))
+
+    def place_swbreakpoint(self, addr):
+        bytes_written = self.ctx.vmi.write_va(addr, self.ctx.target_pid, SW_BREAKPOINT)
+        if bytes_written < len(SW_BREAKPOINT):
+            raise LibvmiError
 
     def restore_opcode(self, addr):
         try:
