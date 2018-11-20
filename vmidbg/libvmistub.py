@@ -26,6 +26,7 @@ class LibVMIStub(GDBStub):
             GDBCmd.DETACH: self.detach,
             GDBCmd.READ_MEMORY: self.read_memory,
             GDBCmd.WRITE_MEMORY: self.write_memory,
+            GDBCmd.WRITE_DATA_MEMORY: self.write_data_memory,
             GDBCmd.CONTINUE: self.cont_execution,
             GDBCmd.SINGLESTEP: self.singlestep,
             GDBCmd.BREAKIN: self.breakin
@@ -259,6 +260,23 @@ class LibVMIStub(GDBStub):
             addr = int(m.group('addr'), 16)
             length = int(m.group('length'), 16)
             data = unhexlify(m.group('data'))
+            # TODO partial write
+            try:
+                bytes_written = self.ctx.vmi.write_va(addr, self.ctx.target_pid, data)
+            except LibvmiError:
+                return False
+            else:
+                self.send_packet(GDBPacket(b'OK'))
+                return True
+        return False
+
+    def write_data_memory(self, packet_data):
+        # ‘X addr,length:XX…’
+        m = re.match(b'(?P<addr>.+),(?P<length>.+):(?P<data>.*)', packet_data)
+        if m:
+            addr = int(m.group('addr'), 16)
+            length = int(m.group('length'), 16)
+            data = m.group('data')
             # TODO partial write
             try:
                 bytes_written = self.ctx.vmi.write_va(addr, self.ctx.target_pid, data)
