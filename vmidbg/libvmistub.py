@@ -41,6 +41,7 @@ class LibVMIStub(GDBStub):
             b'exec-events': False,
             b'vContSupported': False,
             b'QThreadEvents': False,
+            b'QStartNoAckMode': True,
             b'no-resumed': False,
             b'xmlRegisters': False,
             b'qXfer:memory-map:read': True
