@@ -47,7 +47,7 @@ class GDBCmd(Enum):
     WRITE_REGISTERS = 'G'
     DETACH = 'D'
     READ_MEMORY = 'm'
-    WRITE_MEMORY= 'M'
+    WRITE_MEMORY = 'M'
     CONTINUE = 'c'
     SINGLESTEP = 's'
     BREAKIN = '\x03'
@@ -109,7 +109,7 @@ class GDBStub():
                 # create a normal packet to let stub call a handler
                 return b'\x03'
             # packet ?
-            m = re.match(b'\$(?P<data>.*)#(?P<checksum>..)', self.buffer)
+            m = re.match(b'\$(?P<data>.*?)#(?P<checksum>..)', self.buffer)
             if m:
                 packet_data = m.group('data')
                 packet_checksum = int(m.group('checksum'), 16)
@@ -125,7 +125,10 @@ class GDBStub():
             raise ChecksumError('invalid checksum received')
 
     def send_msg(self, msg):
-        self.log.debug('send: %s', msg)
+        if len(msg) > 70:
+            self.log.debug('send: %s...', msg[:70])
+        else:
+            self.log.debug('send: %s', msg)
         self.sock.sendall(msg)
 
     @expect_ack

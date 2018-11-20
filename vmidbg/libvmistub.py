@@ -1,7 +1,8 @@
 import logging
 import re
 import struct
-import sys
+from functools import lru_cache
+from lxml import etree
 from binascii import hexlify, unhexlify
 
 from libvmi import LibvmiError, X86Reg, Registers
@@ -41,7 +42,24 @@ class LibVMIStub(GDBStub):
             b'QThreadEvents': False,
             b'no-resumed': False,
             b'xmlRegisters': False,
+            b'qXfer:memory-map:read': True
         }
+
+    @lru_cache(maxsize=None)
+    def get_memory_map_xml(self):
+        # retrieve list of maps
+        root = etree.Element('memory-map')
+        for page_info in self.ctx.vmi.get_va_pages(self.ctx.target_dtb):
+            # <memory type="ram" start="addr" length="length"/>
+            addr = str(hex(page_info.vaddr))
+            size = str(hex(page_info.size))
+            region = etree.Element('memory', type='ram', start=addr, length=size)
+            root.append(region)
+        doctype = '<!DOCTYPE memory-map ' \
+                  'PUBLIC "+//IDN gnu.org//DTD GDB Memory Map V1.0//EN"' \
+                  ' "http://sourceware.org/gdb/gdb-memory-map.dtd">'
+        xml = etree.tostring(root, xml_declaration=True, doctype=doctype, encoding='UTF-8')
+        return xml
 
     def set_supported_features(self, packet_data):
         # split string and get features in a list
@@ -54,7 +72,7 @@ class LibVMIStub(GDBStub):
             else:
                 groups = f.split(b'=')
                 name = groups[0]
-                value =  groups[1]
+                value = groups[1]
             # TODO check supported features
         reply_msg = b'PacketSize=%x' % PACKET_SIZE
         for name, value in self.features.items():
@@ -93,6 +111,18 @@ class LibVMIStub(GDBStub):
         if re.match(b'C', packet_data):
             # return current thread id
             self.send_packet(GDBPacket(b'QC%x' % self.gen_tid))
+            return True
+        m = re.match(b'Xfer:memory-map:read::(?P<offset>.*),(?P<length>.*)', packet_data)
+        if m:
+            offset = int(m.group('offset'), 16)
+            length = int(m.group('length'), 16)
+            xml = self.get_memory_map_xml()
+            chunk = xml[offset:offset+length]
+            msg = b'm%s' % chunk
+            if len(chunk) < length or offset+length >= len(xml):
+                # last chunk
+                msg = b'l%s' % chunk
+            self.send_packet(GDBPacket(msg))
             return True
         return False
 
