@@ -1,15 +1,17 @@
 import logging
 import re
 import struct
+import threading
 from functools import lru_cache
 from lxml import etree
 from binascii import hexlify, unhexlify
+from concurrent.futures import ThreadPoolExecutor
 
 from libvmi import LibvmiError, X86Reg, Registers
-from libvmi.event import SingleStepEvent, IntEvent
+from libvmi.event import EventResponse, SingleStepEvent, IntEvent
 
 from .gdbstub import GDBStub, GDBPacket, GDBCmd, GDBSignal, PACKET_SIZE
-
+from .debugcontext import dtb_to_pname
 
 SW_BREAKPOINT = b'\xcc'
 
@@ -52,6 +54,8 @@ class LibVMIStub(GDBStub):
         }
         # [addr] -> [saved_opcode]
         self.saved_op = {}
+        self.stop_listen = threading.Event()
+        self.pool = ThreadPoolExecutor(max_workers=1)
 
     @lru_cache(maxsize=None)
     def get_memory_map_xml(self):
@@ -303,6 +307,9 @@ class LibVMIStub(GDBStub):
             return False
         self.ctx.vmi.resume_vm()
         self.send_packet(GDBPacket(b'OK'))
+        # start listening on VMI events
+        self.stop_listen.clear()
+        future = self.pool.submit(self.listen_events)
         return True
 
     def singlestep(self, packet_data):
@@ -373,6 +380,8 @@ class LibVMIStub(GDBStub):
         return False
 
     def breakin(self, packet_data):
+        # stop event thread
+        self.stop_listen.set()
         self.ctx.attach()
         msg = b'S%.2x' % GDBSignal.TRAP.value
         self.send_packet(GDBPacket(msg))
@@ -380,3 +389,35 @@ class LibVMIStub(GDBStub):
 
     def cb_on_int3(self, vmi, event):
         self.log.debug('interrupt: %s', event.to_dict())
+        # set reinjection behavior
+        event.reinject = 0
+        addr = event.cffi_event.x86_regs.rip
+        if not addr in self.saved_op.keys():
+            # not our breakpoint, reinject
+            event.reinject = 1
+            return EventResponse.NONE
+        # check our targeted process
+        dtb = event.cffi_event.x86_regs.cr3
+        if dtb != self.ctx.target_dtb:
+            pname = dtb_to_pname(vmi, dtb)
+            logging.debug('wrong process: %s', pname)
+            # restore original opcode
+            self.restore_opcode(addr)
+            # prepare to singlestep
+            return EventResponse.TOGGLE_SINGLESTEP
+        else:
+            # pause
+            self.ctx.vmi.pause_vm()
+            self.stop_listen.set()
+            # report swbreak stop to client
+            self.send_packet_noack(GDBPacket(b'T%.2xswbreak:;' % GDBSignal.TRAP.value))
+
+    def restore_opcode(self, addr):
+        try:
+            bytes_written = self.ctx.vmi.write_va(addr, self.ctx.target_pid, self.saved_op[addr])
+        except LibvmiError as e:
+            raise RuntimeError('Impossible to restore opcode') from e
+
+    def listen_events(self):
+        while not self.stop_listen.is_set():
+            self.ctx.vmi.listen(2000)
