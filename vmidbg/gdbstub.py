@@ -138,6 +138,9 @@ class GDBStub():
     def send_packet(self, pkt):
         self.send_msg(pkt.to_bytes())
 
+    def send_packet_noack(self, pkt):
+        self.send_msg(pkt.to_bytes())
+
     def handle_rsp(self):
         self.log.info('connected')
 
