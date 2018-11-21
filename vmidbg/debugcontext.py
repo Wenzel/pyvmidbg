@@ -1,5 +1,6 @@
 import logging
 import re
+import json
 
 from libvmi import Libvmi, LibvmiError, X86Reg, INIT_DOMAINNAME, INIT_EVENTS
 from libvmi.event import RegAccess, RegEvent
@@ -35,6 +36,8 @@ class DebugContext:
         self.target_pid = None
         self.target_dtb = None
         self.vmi = Libvmi(self.vm_name, INIT_DOMAINNAME | INIT_EVENTS)
+        self.kernel_base = self.get_kernel_base()
+        logging.info('kernel base address: %s', hex(self.kernel_base))
 
     def __enter__(self):
         return self
@@ -47,6 +50,18 @@ class DebugContext:
             # already in running state
             pass
         self.vmi.destroy()
+
+    def get_kernel_base(self):
+        # small hack with rekall JSON profile to get the kernel base address
+        # LibVMI should provide an API to query it
+        profile_path = self.vmi.get_rekall_path()
+        if not profile_path:
+            raise RuntimeError('Cannot get rekall profile from LibVMI')
+        with open(profile_path) as f:
+            profile = json.load(f)
+            ps_head_rva = profile['$CONSTANTS']['PsActiveProcessHead']
+            ps_head_va = self.vmi.translate_ksym2v('PsActiveProcessHead')
+            return ps_head_va - ps_head_rva
 
     def attach(self):
         self.log.info('attaching on %s', self.target_name)

@@ -46,6 +46,7 @@ vmidbg <port> <vm> <process>
 example:
 ~~~
 (venv) $ sudo vmidbg 5000 winxp explorer.exe
+INFO:root:kernel base address: 0x804d7000
 INFO:DebugContext:attaching on explorer.exe
 INFO:DebugContext:intercepted System
 INFO:DebugContext:intercepted csrss.exe
