@@ -170,7 +170,9 @@ class GDBStub():
     def call_handler(self, packet_data):
         cmd, cmd_data = chr(packet_data[0]), packet_data[1:]
         try:
-            handler = self.cmd_to_handler[GDBCmd(cmd)]
+            gdb_cmd = GDBCmd(cmd)
+            logging.info('command %s: %s', gdb_cmd.value, gdb_cmd.name)
+            handler = self.cmd_to_handler[gdb_cmd]
         except (ValueError, KeyError):
             self.log.info('unknown command {}'.format(cmd))
             self.send_packet(GDBPacket(b''))
