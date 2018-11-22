@@ -54,6 +54,7 @@ class GDBCmd(Enum):
     REMOVE_XPOINT = 'z'
     INSERT_XPOINT = 'Z'
     BREAKIN = '\x03'
+    V_FEATURES = 'v'
 
 
 class ChecksumError(Exception):

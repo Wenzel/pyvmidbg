@@ -36,7 +36,8 @@ class LibVMIStub(GDBStub):
             GDBCmd.SINGLESTEP: self.singlestep,
             GDBCmd.REMOVE_XPOINT: self.remove_xpoint,
             GDBCmd.INSERT_XPOINT: self.insert_xpoint,
-            GDBCmd.BREAKIN: self.breakin
+            GDBCmd.BREAKIN: self.breakin,
+            GDBCmd.V_FEATURES: self.v_features,
         }
         self.features = {
             b'multiprocess': False,
@@ -46,7 +47,7 @@ class LibVMIStub(GDBStub):
             b'fork-events': False,
             b'vfork-events': False,
             b'exec-events': False,
-            b'vContSupported': False,
+            b'vContSupported': True,
             b'QThreadEvents': False,
             b'QStartNoAckMode': True,
             b'no-resumed': False,
@@ -300,11 +301,10 @@ class LibVMIStub(GDBStub):
         if m:
             addr = int(m.group('addr'), 16)
             return False
-        self.ctx.vmi.resume_vm()
+        self.action_continue()
         self.send_packet(GDBPacket(b'OK'))
-        # start listening on VMI events
-        self.stop_listen.clear()
-        future = self.pool.submit(self.listen_events)
+        # TODO race condition if listen thread started by action_continue
+        # sends a packet before our 'OK' reply
         return True
 
     def singlestep(self, packet_data):
@@ -315,30 +315,8 @@ class LibVMIStub(GDBStub):
             addr = int(m.group('addr'), 16)
             return False
 
-        cb_data = {
-            'interrupted': False
-        }
+        self.action_singlestep()
 
-        def cb_on_sstep(vmi, event):
-            self.log.debug('singlestepping')
-            vmi.pause_vm()
-            cb_data['interrupted'] = True
-        # unregister sstep_recoil
-        self.ctx.vmi.clear_event(self.ss_event_recoil)
-
-        num_vcpus = self.ctx.vmi.get_num_vcpus()
-        ss_event = SingleStepEvent(range(num_vcpus), cb_on_sstep)
-        self.ctx.vmi.register_event(ss_event)
-
-        self.ctx.vmi.resume_vm()
-        while not cb_data['interrupted']:
-            self.ctx.vmi.listen(1000)
-
-        self.ctx.vmi.listen(0)
-        self.ctx.vmi.clear_event(ss_event)
-
-        # reregister sstep_recoil
-        self.ctx.vmi.register_event(self.ss_event_recoil)
         msg = b'S%.2x' % GDBSignal.TRAP.value
         self.send_packet(GDBPacket(msg))
         return True
@@ -435,7 +413,63 @@ class LibVMIStub(GDBStub):
             # report swbreak stop to client
             self.send_packet_noack(GDBPacket(b'T%.2xswbreak:;' % GDBSignal.TRAP.value))
 
+    def v_features(self, packet_data):
+        if re.match(b'MustReplyEmpty', packet_data):
+            # reply empty string
+            # TODO refactoring, this should be treated as an unknown packet
+            self.send_packet(GDBPacket(b''))
+            return True
+        if re.match(b'Cont\?', packet_data):
+            # query the list of supported actions for vCont
+            # reply: vCont[;action…]
+            self.send_packet(GDBPacket(b'vCont;c;s'))
+            return True
+        m = re.match(b'Cont(;(?P<action>.*)(:(?P<tid>.*))?).*', packet_data)
+        if m:
+            # vCont[;action[:thread-id]]…
+            action = m.group('action')
+            if action == b's':
+                self.action_singlestep()
+                self.send_packet_noack(GDBPacket(b'T%.2x:;' % GDBSignal.TRAP.value))
+                return True
+            if action == b'c':
+                self.action_continue()
+                return True
+        return False
+
 # helpers
+    def action_singlestep(self):
+        cb_data = {
+            'interrupted': False
+        }
+
+        def cb_on_sstep(vmi, event):
+            self.log.debug('singlestepping')
+            vmi.pause_vm()
+            cb_data['interrupted'] = True
+        # unregister sstep_recoil
+        self.ctx.vmi.clear_event(self.ss_event_recoil)
+
+        num_vcpus = self.ctx.vmi.get_num_vcpus()
+        ss_event = SingleStepEvent(range(num_vcpus), cb_on_sstep)
+        self.ctx.vmi.register_event(ss_event)
+
+        self.ctx.vmi.resume_vm()
+        while not cb_data['interrupted']:
+            self.ctx.vmi.listen(1000)
+
+        self.ctx.vmi.listen(0)
+        self.ctx.vmi.clear_event(ss_event)
+
+        # reregister sstep_recoil
+        self.ctx.vmi.register_event(self.ss_event_recoil)
+
+    def action_continue(self):
+        self.ctx.vmi.resume_vm()
+        # start listening on VMI events
+        self.stop_listen.clear()
+        self.pool.submit(self.listen_events)
+
     def set_supported_features(self, packet_data):
         # split string and get features in a list
         # trash 'Supported
