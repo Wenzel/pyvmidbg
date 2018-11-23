@@ -332,8 +332,10 @@ class LibVMIStub(GDBStub):
         kind = int(m.group('kind'), 16)
         if btype == 0:
             # software breakpoint
-            self.toggle_swbreak(addr, False)
-            self.addr_to_op.pop(addr)
+            # already removed ?
+            if addr in self.addr_to_op.keys():
+                self.toggle_swbreak(addr, False)
+                self.addr_to_op.pop(addr)
             self.send_packet(GDBPacket(b'OK'))
             return True
         return False
