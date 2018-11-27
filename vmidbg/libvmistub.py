@@ -424,15 +424,18 @@ class LibVMIStub(GDBStub):
         if re.match(b'Cont\?', packet_data):
             # query the list of supported actions for vCont
             # reply: vCont[;action…]
-            self.send_packet(GDBPacket(b'vCont;c;s'))
+            # we do not support continue or singlestep with a signal
+            # but we have to advertise this to GDB, otherwise it won't use vCont
+            self.send_packet(GDBPacket(b'vCont;c;C;s;S'))
             return True
-        m = re.match(b'Cont(;(?P<action>.*)(:(?P<tid>.*))?).*', packet_data)
+        m = re.match(b'Cont(;(?P<action>[sc])(:(?P<tid>.*?))?).*', packet_data)
         if m:
             # vCont[;action[:thread-id]]…
+            # we don't support threads
             action = m.group('action')
             if action == b's':
                 self.action_singlestep()
-                self.send_packet_noack(GDBPacket(b'T%.2x:;' % GDBSignal.TRAP.value))
+                self.send_packet_noack(GDBPacket(b'T%.2x' % GDBSignal.TRAP.value))
                 return True
             if action == b'c':
                 self.action_continue()
