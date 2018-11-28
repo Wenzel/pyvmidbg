@@ -45,6 +45,7 @@ By leveraging *virtual machine introspection*, the stub remains **stealth** and 
 - `python3-docopt`
 - `python3-lxml`
 - [`python3-libvmi`](https://github.com/libvmi/python)
+- `Xen`
 
 ## Install
 
@@ -53,6 +54,9 @@ virtualenv -p python3 venv
 source venv/bin/activate
 pip install .
 ~~~
+
+Note: If you don't want to install `Xen`, [vagrant-xen-pyvmidbg](https://github.com/Wenzel/vagrant-xen-pyvmidbg)
+provides a Vagrant environment based on `KVM`, with ready to use `Windows` and `Linux` VMs.
 
 ## Usage
 
