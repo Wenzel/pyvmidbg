@@ -125,23 +125,23 @@ $ r2 -b 32 -d gdb://127.0.0.1:5000
             0x80545cbd      c1e810         shr eax, 0x10
 ~~~
 
-# References
+## References
 
 - [vmidbg](https://github.com/Zentific/vmidbg): original idea and C implementation
 - [plutonium-dbg](https://github.com/plutonium-dbg/plutonium-dbg): [GDB server protocol parsing](https://github.com/plutonium-dbg/plutonium-dbg/blob/master/clients/gdbserver.py)
 - [ollydbg2-python](https://github.com/0vercl0k/ollydbg2-python): [GDB server protocol parsing](https://github.com/0vercl0k/ollydbg2-python/blob/master/samples/gdbserver/gdbserver.py)
 - [GDB RSP protocol specifications](https://sourceware.org/gdb/onlinedocs/gdb/Remote-Protocol.html)
 
-# Maintainers
+## Maintainers
 
 [@Wenzel](https://github.com/Wenzel)
 
-# Contributing
+## Contributing
 
 PRs accepted.
 
 Small note: If editing the Readme, please conform to the [standard-readme](https://github.com/RichardLitt/standard-readme) specification.
 
-# License
+## License
 
 [GNU General Public License v3.0](https://github.com/Wenzel/pyvmidbg/blob/master/LICENSE)
