@@ -1,6 +1,24 @@
 # pyvmidbg
 
-LibVMI-based GDB server, implemented in Python
+[![standard-readme compliant](https://img.shields.io/badge/readme%20style-standard-brightgreen.svg?style=flat-square)](https://github.com/RichardLitt/standard-readme)
+
+> LibVMI-based GDB server, implemented in Python
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Features](#features)
+- [Requirements](#requirements)
+- [Install](#install)
+- [Usage](#usage)
+    - [Server](#server)
+    - [GDB Frontends](#gdb-frontends)
+ - [References](#references)
+ - [Maintainers](#maintainers)
+ - [Contributing](#contributing)
+ - [License](#license)
+
+## Overview
 
 This GDB stub allows you to debug a remote process running in a VM with
 your favorite GDB frontend.
@@ -10,7 +28,7 @@ By leveraging *virtual machine introspection*, the stub remains **stealth** and 
 
 ![vmidbg](https://user-images.githubusercontent.com/964610/48309807-87ff5680-e581-11e8-8b4c-556462d09f60.png)
 
-# Features
+## Features
 
 - intercept process at `CR3` load
 - read/write memory
@@ -20,14 +38,14 @@ By leveraging *virtual machine introspection*, the stub remains **stealth** and 
 - breakin (`CTRL-C`)
 - insert/remove software breakpoint
 
-# Requirements
+## Requirements
 
 - `Python 3`
 - `python3-docopt`
 - `python3-lxml`
 - [`python3-libvmi`](https://github.com/libvmi/python)
 
-# Setup
+## Install
 
 ~~~
 virtualenv -p python3 venv
@@ -35,9 +53,9 @@ source venv/bin/activate
 pip install .
 ~~~
 
-# Run
+## Usage
 
-## Server
+### Server
 
 ~~~
 vmidbg <port> <vm> <process>
@@ -55,9 +73,9 @@ INFO:server:listening on 127.0.0.1:5000
 ...
 ~~~
 
-## GDB Frontends
+### GDB Frontends
 
-### GDB
+#### GDB
 
 ~~~
 $ gdb
@@ -84,7 +102,7 @@ determining executable automatically.  Try using the "file" command.
    0x80545cbd:  shr    $0x10,%eax
 ~~~
 
-### radare2
+#### radare2
 
 ~~~
 $ r2 -b 32 -d gdb://127.0.0.1:5000
@@ -108,3 +126,17 @@ $ r2 -b 32 -d gdb://127.0.0.1:5000
 - [plutonium-dbg](https://github.com/plutonium-dbg/plutonium-dbg): [GDB server protocol parsing](https://github.com/plutonium-dbg/plutonium-dbg/blob/master/clients/gdbserver.py)
 - [ollydbg2-python](https://github.com/0vercl0k/ollydbg2-python): [GDB server protocol parsing](https://github.com/0vercl0k/ollydbg2-python/blob/master/samples/gdbserver/gdbserver.py)
 - [GDB RSP protocol specifications](https://sourceware.org/gdb/onlinedocs/gdb/Remote-Protocol.html)
+
+# Maintainers
+
+[@Wenzel](https://github.com/Wenzel)
+
+# Contributing
+
+PRs accepted.
+
+Small note: If editing the Readme, please conform to the [standard-readme](https://github.com/RichardLitt/standard-readme) specification.
+
+# License
+
+[GNU General Public License v3.0](https://github.com/Wenzel/pyvmidbg/blob/master/LICENSE)
