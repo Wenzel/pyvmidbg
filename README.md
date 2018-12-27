@@ -63,7 +63,7 @@ provides a Vagrant environment based on `KVM`, with ready to use `Windows` and `
 ### Server
 
 ~~~
-vmidbg <port> <vm> <process>
+vmidbg <port> <vm> [<process>]
 ~~~
 
 example:

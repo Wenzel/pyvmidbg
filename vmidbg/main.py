@@ -3,7 +3,7 @@
 """LibVMI-based GDB server.
 
 Usage:
-  vmidbg.py [options] <port> <vm_name> <process>
+  vmidbg.py [options] <port> <vm_name> [<process>]
   vmidbg.py (-h | --help)
 
 Options:
