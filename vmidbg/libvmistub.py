@@ -396,12 +396,13 @@ class LibVMIStub(GDBStub):
         if addr not in self.addr_to_op.keys():
             # not our breakpoint, reinject
             event.reinject = 1
+            self.log.debug('reinject')
             return EventResponse.NONE
         # check our targeted process
         dtb = event.cffi_event.x86_regs.cr3
-        if dtb != self.ctx.target_dtb:
+        if dtb != self.ctx.target_dtb and not self.ctx.full_system_mode:
             pname = dtb_to_pname(vmi, dtb)
-            logging.debug('wrong process: %s', pname)
+            self.log.debug('wrong process: %s', pname)
             # store current address to restore breakpoint in cb_sstep_recoil
             self.last_addr_wrong_swbreak = addr
             # restore original opcode
@@ -409,6 +410,7 @@ class LibVMIStub(GDBStub):
             # prepare to singlestep
             return EventResponse.TOGGLE_SINGLESTEP
         else:
+            self.log.debug('hit !')
             # pause
             self.ctx.vmi.pause_vm()
             self.stop_listen.set()
@@ -463,7 +465,7 @@ class LibVMIStub(GDBStub):
         while not cb_data['interrupted']:
             self.ctx.vmi.listen(1000)
 
-        self.ctx.vmi.listen(0)
+        # self.ctx.vmi.listen(0)
         self.ctx.vmi.clear_event(ss_event)
 
         # reregister sstep_recoil

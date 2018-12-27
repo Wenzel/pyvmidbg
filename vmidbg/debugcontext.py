@@ -67,11 +67,14 @@ class DebugContext:
     def __init__(self, vm_name, process_name):
         self.log = logging.getLogger(__class__.__name__)
         self.vm_name = vm_name
-        self.target_name = 'kernel'
-        self.target_pid = 0
-        if process_name is not None:
-            self.target_name = process_name
-            self.target_pid = None
+        self.full_system_mode = False
+        self.target_name = process_name
+        self.target_pid = None
+        if process_name is None:
+            self.full_system_mode = True
+            self.target_name = 'kernel'
+            # kernel space is represented by PID 0 in LibVMI
+            self.target_pid = 0
         self.target_dtb = None
         self.vmi = Libvmi(self.vm_name, INIT_DOMAINNAME | INIT_EVENTS)
         self.kernel_base = self.get_kernel_base()
@@ -110,8 +113,8 @@ class DebugContext:
         self.log.info('attaching on %s', self.target_name)
         # VM must be running
         self.vmi.pause_vm()
-        if self.target_pid == 0:
-            # no need to intercept the kernel
+        if self.full_system_mode:
+            # no need to intercept a specific process
             regs = self.vmi.get_vcpuregs(0)
             self.target_dtb = regs[X86Reg.CR3]
             return
