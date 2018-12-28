@@ -11,16 +11,16 @@ from libvmi import LibvmiError, X86Reg, Registers
 from libvmi.event import EventResponse, SingleStepEvent, IntEvent
 
 from .gdbstub import GDBStub, GDBPacket, GDBCmd, GDBSignal, PACKET_SIZE
-from .debugcontext import dtb_to_pname
+from .debugcontext import DebugContext, dtb_to_pname
 
 SW_BREAKPOINT = b'\xcc'
 
 
 class LibVMIStub(GDBStub):
 
-    def __init__(self, conn, addr, debug_ctx):
+    def __init__(self, conn, addr, vm_name, process):
         super().__init__(conn, addr)
-        self.ctx = debug_ctx
+        self.ctx = DebugContext(vm_name, process)
         self.cmd_to_handler = {
             GDBCmd.GEN_QUERY_GET: self.gen_query_get,
             GDBCmd.GEN_QUERY_SET: self.gen_query_set,
@@ -72,6 +72,16 @@ class LibVMIStub(GDBStub):
         # used in cb_on_sstep_recoil to restore the breakpoint after
         # the recoil
         self.last_addr_wrong_swbreak = None
+
+    def __enter__(self):
+        self.ctx.attach()
+        self.attached = True
+        return self
+
+    def __exit__(self, type, value, traceback):
+        self.ctx.detach()
+        self.attached = False
+        # TODO restore opcodes
 
     @lru_cache(maxsize=None)
     def get_memory_map_xml(self):
@@ -442,6 +452,14 @@ class LibVMIStub(GDBStub):
             if action == b'c':
                 self.action_continue()
                 return True
+        if re.match(b'Kill;(?P<pid>[a-fA-F0-9]).+', packet_data):
+            # vKill;pid
+            # ignore pid, and don't kill the process anyway
+            # just detach from the target
+            # sent when GDB client has a ^D
+            self.attached = False
+            self.send_packet(GDBPacket(b'OK'))
+            return True
         return False
 
 # helpers
