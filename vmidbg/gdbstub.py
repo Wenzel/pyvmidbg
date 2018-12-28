@@ -91,9 +91,11 @@ class GDBStub():
         self.gen_tid = 0
         self.cont_tid = 0
 
-    # should be reimplemented by child classes
-    def attach(self):
-        raise RuntimeError('Unimplemented method')
+    def __enter__(self):
+        return self
+
+    def __exit__(self, type, value, traceback):
+        pass
 
     def read_packet(self):
         epoll = select.epoll()

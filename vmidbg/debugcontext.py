@@ -81,18 +81,6 @@ class DebugContext:
         if self.kernel_base:
             logging.info('kernel base address: %s', hex(self.kernel_base))
 
-    def __enter__(self):
-        return self
-
-    def __exit__(self, type, value, traceback):
-        try:
-            logging.info('resuming VM execution')
-            self.vmi.resume_vm()
-        except LibvmiError:
-            # already in running state
-            pass
-        self.vmi.destroy()
-
     def get_kernel_base(self):
         if self.vmi.get_ostype() == VMIOS.LINUX:
             return self.vmi.translate_ksym2v('start_kernel')
@@ -144,3 +132,12 @@ class DebugContext:
         self.vmi.listen(0)
         # clear event
         self.vmi.clear_event(reg_event)
+
+    def detach(self):
+        try:
+            logging.info('resuming VM execution')
+            self.vmi.resume_vm()
+        except LibvmiError:
+            # already in running state
+            pass
+        self.vmi.destroy()
