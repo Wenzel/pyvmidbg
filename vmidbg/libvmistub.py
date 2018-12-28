@@ -452,6 +452,14 @@ class LibVMIStub(GDBStub):
             if action == b'c':
                 self.action_continue()
                 return True
+        if re.match(b'Kill;(?P<pid>[a-fA-F0-9]).+', packet_data):
+            # vKill;pid
+            # ignore pid, and don't kill the process anyway
+            # just detach from the target
+            # sent when GDB client has a ^D
+            self.attached = False
+            self.send_packet(GDBPacket(b'OK'))
+            return True
         return False
 
 # helpers
