@@ -84,12 +84,16 @@ class GDBStub():
         self.addr = addr
         self.sock.setblocking(True)
         self.no_ack = False
-        self.attached = True
+        self.attached = False
         self.buffer = b''
         self.last_pkt = None
         self.cmd_to_handler = {}
         self.gen_tid = 0
         self.cont_tid = 0
+
+    # should be reimplemented by child classes
+    def attach(self):
+        raise RuntimeError('Unimplemented method')
 
     def read_packet(self):
         epoll = select.epoll()

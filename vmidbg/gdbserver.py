@@ -36,6 +36,7 @@ class GDBServer:
             conn, addr = self.sock.accept()
             self.log.info('new client %s', addr)
             client = self.stub_cls(conn, addr, *self.stub_args)
+            client.attach()
             client.handle_rsp()
             # future = self.pool.submit(client.handle_connexion)
             # self.future_to_client[future] = client

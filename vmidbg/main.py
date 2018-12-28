@@ -36,7 +36,6 @@ def main():
     logging.basicConfig(level=log_level)
 
     with DebugContext(vm_name, process) as ctx:
-        ctx.attach()
         with GDBServer(address, port, stub_cls=LibVMIStub, stub_args=(ctx,)) as server:
             server.listen()
 

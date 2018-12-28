@@ -89,6 +89,10 @@ class LibVMIStub(GDBStub):
         xml = etree.tostring(root, xml_declaration=True, doctype=doctype, encoding='UTF-8')
         return xml
 
+    def attach(self):
+        self.ctx.attach()
+        self.attached = True
+
 # commands
     def gen_query_get(self, packet_data):
         if re.match(b'Supported', packet_data):
