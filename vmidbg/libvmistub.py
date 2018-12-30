@@ -483,7 +483,7 @@ class LibVMIStub(GDBStub):
         while not cb_data['interrupted']:
             self.ctx.vmi.listen(1000)
 
-        # self.ctx.vmi.listen(0)
+        self.ctx.vmi.listen(0)
         self.ctx.vmi.clear_event(ss_event)
 
         # reregister sstep_recoil
