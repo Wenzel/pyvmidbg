@@ -23,6 +23,6 @@ setup(
     tests_require=["pytest", "pytest-pep8", "libvirt-python"],
     packages=['vmidbg'],
     entry_points={
-        'console_scripts': ['vmidbg=vmidbg.main:main'],
+        'console_scripts': ['vmidbg=vmidbg.__main__:main'],
     }
 )
