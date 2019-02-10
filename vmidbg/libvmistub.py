@@ -7,11 +7,14 @@ from lxml import etree
 from binascii import hexlify, unhexlify
 from concurrent.futures import ThreadPoolExecutor
 
-from libvmi import LibvmiError, X86Reg, Registers
+from libvmi import Libvmi, INIT_DOMAINNAME, INIT_EVENTS, VMIOS, LibvmiError, X86Reg
 from libvmi.event import EventResponse, SingleStepEvent, IntEvent
 
 from .gdbstub import GDBStub, GDBPacket, GDBCmd, GDBSignal, PACKET_SIZE
-from .debugcontext import DebugContext, dtb_to_pname
+from .debugcontext import dtb_to_pname
+from .rawdebugcontext import RawDebugContext
+from .linuxdebugcontext import LinuxDebugContext
+from .windowsdebugcontext import WindowsDebugContext
 
 SW_BREAKPOINT = b'\xcc'
 
@@ -20,7 +23,21 @@ class LibVMIStub(GDBStub):
 
     def __init__(self, conn, addr, vm_name, process):
         super().__init__(conn, addr)
-        self.ctx = DebugContext(vm_name, process)
+        # init LibVMI
+        self.vmi = Libvmi(vm_name, init_flags=INIT_DOMAINNAME | INIT_EVENTS, partial=True)
+        self.vmi.init_paging(flags=0)
+        self.process = process
+        if self.process:
+            self.vmi.init_os()
+            ostype = self.vmi.get_ostype()
+            if ostype == VMIOS.WINDOWS:
+                self.ctx = WindowsDebugContext(self.vmi, self.process)
+            elif ostype == VMIOS.LINUX:
+                self.ctx = LinuxDebugContext(self.vmi, self.process)
+            else:
+                raise RuntimeError('unhandled ostype: {}'.format(ostype.value))
+        else:
+            self.ctx = RawDebugContext(self.vmi)
         self.cmd_to_handler = {
             GDBCmd.GEN_QUERY_GET: self.gen_query_get,
             GDBCmd.GEN_QUERY_SET: self.gen_query_set,
@@ -61,12 +78,12 @@ class LibVMIStub(GDBStub):
         # register some events
         # register interrupt event
         self.int_event = IntEvent(self.cb_on_int3)
-        self.ctx.vmi.register_event(self.int_event)
+        self.vmi.register_event(self.int_event)
         # single step event to handle wrong hits by sw breakpoints
         # enabled via EventResponse.TOGGLE_SINGLESTEP
-        num_vcpus = self.ctx.vmi.get_num_vcpus()
+        num_vcpus = self.vmi.get_num_vcpus()
         self.ss_event_recoil = SingleStepEvent(range(num_vcpus), self.cb_on_sstep_recoil, enable=False)
-        self.ctx.vmi.register_event(self.ss_event_recoil)
+        self.vmi.register_event(self.ss_event_recoil)
         # store the last addr where a swbreakpoint was hit
         # but it was not our targeted process
         # used in cb_on_sstep_recoil to restore the breakpoint after
@@ -81,13 +98,14 @@ class LibVMIStub(GDBStub):
     def __exit__(self, type, value, traceback):
         self.ctx.detach()
         self.attached = False
+        self.vmi.destroy()
         # TODO restore opcodes
 
     @lru_cache(maxsize=None)
     def get_memory_map_xml(self):
         # retrieve list of maps
         root = etree.Element('memory-map')
-        for page_info in self.ctx.vmi.get_va_pages(self.ctx.target_dtb):
+        for page_info in self.vmi.get_va_pages(self.ctx.get_dtb()):
             # <memory type="ram" start="addr" length="length"/>
             addr = str(hex(page_info.vaddr))
             size = str(hex(page_info.size))
@@ -173,14 +191,14 @@ class LibVMIStub(GDBStub):
         return True
 
     def read_registers(self, packet_data):
-        addr_width = self.ctx.vmi.get_address_width()
+        addr_width = self.vmi.get_address_width()
         if addr_width == 4:
             pack_fmt = '@I'
         else:
             pack_fmt = '@Q'
 
         # TODO VCPU 0
-        regs = self.ctx.vmi.get_vcpuregs(0)
+        regs = self.vmi.get_vcpuregs(0)
         gen_regs_32 = [
             X86Reg.RAX, X86Reg.RCX, X86Reg.RDX, X86Reg.RBX,
             X86Reg.RSP, X86Reg.RBP, X86Reg.RSI, X86Reg.RDI, X86Reg.RIP
@@ -204,7 +222,7 @@ class LibVMIStub(GDBStub):
         return True
 
     def write_registers(self, packet_data):
-        addr_width = self.ctx.vmi.get_address_width()
+        addr_width = self.vmi.get_address_width()
         if addr_width == 4:
             pack_fmt = '@I'
         else:
@@ -221,7 +239,7 @@ class LibVMIStub(GDBStub):
 
         # TODO parse the entire buffer
         # regs = Registers()
-        regs = self.ctx.vmi.get_vcpuregs(0)
+        regs = self.vmi.get_vcpuregs(0)
         iter = struct.iter_unpack(pack_fmt, unhexlify(packet_data))
         for r in gen_regs_32:
             value, *rest = next(iter)
@@ -239,7 +257,7 @@ class LibVMIStub(GDBStub):
         regs[X86Reg.RFLAGS] = value
         # TODO segment registers
         try:
-            self.ctx.vmi.set_vcpuregs(regs, 0)
+            self.vmi.set_vcpuregs(regs, 0)
         except LibvmiError:
             return False
         else:
@@ -250,7 +268,7 @@ class LibVMIStub(GDBStub):
         # detach
         self.attached = False
         try:
-            self.ctx.vmi.resume_vm()
+            self.vmi.resume_vm()
         except LibvmiError:
             pass
         self.send_packet(GDBPacket(b'OK'))
@@ -263,7 +281,7 @@ class LibVMIStub(GDBStub):
             length = int(m.group('length'), 16)
             # TODO partial read
             try:
-                buffer, bytes_read = self.ctx.vmi.read_va(addr, self.ctx.target_pid, length)
+                buffer, bytes_read = self.vmi.read(self.ctx.get_access_context(addr), length)
             except LibvmiError:
                 return False
             else:
@@ -279,7 +297,7 @@ class LibVMIStub(GDBStub):
             data = unhexlify(m.group('data'))
             # TODO partial write
             try:
-                bytes_written = self.ctx.vmi.write_va(addr, self.ctx.target_pid, data)
+                bytes_written = self.vmi.write(self.ctx.get_access_context(addr), data)
             except LibvmiError:
                 return False
             else:
@@ -296,7 +314,7 @@ class LibVMIStub(GDBStub):
             data = m.group('data')
             # TODO partial write
             try:
-                bytes_written = self.ctx.vmi.write_va(addr, self.ctx.target_pid, data)
+                bytes_written = self.vmi.write(self.ctx.get_access_context(addr), data)
             except LibvmiError:
                 return False
             else:
@@ -363,7 +381,7 @@ class LibVMIStub(GDBStub):
             # software breakpoint
             # read old opcode
             try:
-                buffer, bytes_read = self.ctx.vmi.read_va(addr, self.ctx.target_pid, kind)
+                buffer, bytes_read = self.vmi.read(self.ctx.get_access_context(addr), kind)
             except LibvmiError:
                 return False
             if bytes_read < kind:
@@ -400,7 +418,7 @@ class LibVMIStub(GDBStub):
 
     def cb_on_int3(self, vmi, event):
         self.log.debug('cb_on_int3')
-        # set reinjection behavior
+        # set default reinject behavior
         event.reinject = 0
         addr = event.cffi_event.x86_regs.rip
         if addr not in self.addr_to_op.keys():
@@ -408,24 +426,33 @@ class LibVMIStub(GDBStub):
             event.reinject = 1
             self.log.debug('reinject')
             return EventResponse.NONE
-        # check our targeted process
-        dtb = event.cffi_event.x86_regs.cr3
-        if dtb != self.ctx.target_dtb and not self.ctx.full_system_mode:
-            pname = dtb_to_pname(vmi, dtb)
-            self.log.debug('wrong process: %s', pname)
-            # store current address to restore breakpoint in cb_sstep_recoil
-            self.last_addr_wrong_swbreak = addr
-            # restore original opcode
-            self.toggle_swbreak(addr, False)
-            # prepare to singlestep
-            return EventResponse.TOGGLE_SINGLESTEP
-        else:
+        if not self.process:
+            # not target
             self.log.debug('hit !')
             # pause
-            self.ctx.vmi.pause_vm()
+            self.vmi.pause_vm()
             self.stop_listen.set()
             # report swbreak stop to client
             self.send_packet_noack(GDBPacket(b'T%.2xswbreak:;' % GDBSignal.TRAP.value))
+        else:
+            # check if it's our targeted process
+            dtb = event.cffi_event.x86_regs.cr3
+            if dtb != self.ctx.get_dtb():
+                pname = dtb_to_pname(vmi, dtb)
+                self.log.debug('wrong process: %s', pname)
+                # store current address to restore breakpoint in cb_sstep_recoil
+                self.last_addr_wrong_swbreak = addr
+                # restore original opcode
+                self.toggle_swbreak(addr, False)
+                # prepare to singlestep
+                return EventResponse.TOGGLE_SINGLESTEP
+            else:
+                self.log.debug('hit !')
+                # pause
+                self.vmi.pause_vm()
+                self.stop_listen.set()
+                # report swbreak stop to client
+                self.send_packet_noack(GDBPacket(b'T%.2xswbreak:;' % GDBSignal.TRAP.value))
 
     def v_features(self, packet_data):
         if re.match(b'MustReplyEmpty', packet_data):
@@ -473,24 +500,24 @@ class LibVMIStub(GDBStub):
             vmi.pause_vm()
             cb_data['interrupted'] = True
         # unregister sstep_recoil
-        self.ctx.vmi.clear_event(self.ss_event_recoil)
+        self.vmi.clear_event(self.ss_event_recoil)
 
-        num_vcpus = self.ctx.vmi.get_num_vcpus()
+        num_vcpus = self.vmi.get_num_vcpus()
         ss_event = SingleStepEvent(range(num_vcpus), cb_on_sstep)
-        self.ctx.vmi.register_event(ss_event)
+        self.vmi.register_event(ss_event)
 
-        self.ctx.vmi.resume_vm()
+        self.vmi.resume_vm()
         while not cb_data['interrupted']:
-            self.ctx.vmi.listen(1000)
+            self.vmi.listen(1000)
 
-        self.ctx.vmi.listen(0)
-        self.ctx.vmi.clear_event(ss_event)
+        self.vmi.listen(0)
+        self.vmi.clear_event(ss_event)
 
         # reregister sstep_recoil
-        self.ctx.vmi.register_event(self.ss_event_recoil)
+        self.vmi.register_event(self.ss_event_recoil)
 
     def action_continue(self):
-        self.ctx.vmi.resume_vm()
+        self.vmi.resume_vm()
         # start listening on VMI events
         self.stop_listen.clear()
         self.pool.submit(self.listen_events)
@@ -518,13 +545,13 @@ class LibVMIStub(GDBStub):
 
     def listen_events(self):
         while not self.stop_listen.is_set():
-            self.ctx.vmi.listen(2000)
+            self.vmi.listen(2000)
 
     def toggle_swbreak(self, addr, set):
         if set:
             buffer = SW_BREAKPOINT
         else:
             buffer = self.addr_to_op[addr]
-        bytes_written = self.ctx.vmi.write_va(addr, self.ctx.target_pid, buffer)
+        bytes_written = self.vmi.write(self.ctx.get_access_context(addr), buffer)
         if bytes_written < len(buffer):
             raise LibvmiError
