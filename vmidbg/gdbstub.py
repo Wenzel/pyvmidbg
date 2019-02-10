@@ -88,8 +88,6 @@ class GDBStub():
         self.buffer = b''
         self.last_pkt = None
         self.cmd_to_handler = {}
-        self.gen_tid = 0
-        self.cont_tid = 0
 
     def __enter__(self):
         return self

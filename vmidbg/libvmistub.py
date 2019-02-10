@@ -133,7 +133,12 @@ class LibVMIStub(GDBStub):
             # TODO
             return False
         if re.match(b'fThreadInfo', packet_data):
-            self.send_packet(GDBPacket(b'm0'))
+            reply = b'm'
+            for thread in self.ctx.list_threads():
+                if reply != b'm':
+                    reply += b','
+                reply += b'%x' % thread.id
+            self.send_packet(GDBPacket(reply))
             return True
         if re.match(b'sThreadInfo', packet_data):
             # send end of thread list
@@ -146,7 +151,7 @@ class LibVMIStub(GDBStub):
             return True
         if re.match(b'C', packet_data):
             # return current thread id
-            self.send_packet(GDBPacket(b'QC%x' % self.gen_tid))
+            self.send_packet(GDBPacket(b'QC%x' % self.ctx.list_threads()[self.ctx.cur_tid_idx].id))
             return True
         m = re.match(b'Xfer:memory-map:read::(?P<offset>.*),(?P<length>.*)', packet_data)
         if m:
@@ -179,7 +184,7 @@ class LibVMIStub(GDBStub):
         if m:
             op = m.group('op')
             tid = int(m.group('tid'), 16)
-            self.cont_tid = tid
+            self.ctx.cur_tid = tid
             # TODO op, Enn
             self.send_packet(GDBPacket(b'OK'))
             return True
