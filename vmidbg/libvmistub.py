@@ -51,6 +51,7 @@ class LibVMIStub(GDBStub):
             GDBCmd.WRITE_DATA_MEMORY: self.write_data_memory,
             GDBCmd.CONTINUE: self.cont_execution,
             GDBCmd.SINGLESTEP: self.singlestep,
+            GDBCmd.IS_THREAD_ALIVE: self.is_thread_alive,
             GDBCmd.REMOVE_XPOINT: self.remove_xpoint,
             GDBCmd.INSERT_XPOINT: self.insert_xpoint,
             GDBCmd.BREAKIN: self.breakin,
@@ -353,6 +354,21 @@ class LibVMIStub(GDBStub):
         msg = b'S%.2x' % GDBSignal.TRAP.value
         self.send_packet(GDBPacket(msg))
         return True
+
+    def is_thread_alive(self, packet_data):
+        m = re.match(b'(?P<tid>.+)', packet_data)
+        if m:
+            tid = int(m.group('tid'), 16)
+            status = self.ctx.list_threads()[tid-1].is_alive()
+            reply = None
+            if status:
+                reply = b'OK'
+            else:
+                # TODO thread is dead
+                reply = b'EXX'
+            self.send_packet(GDBPacket(reply))
+            return True
+        return False
 
     def remove_xpoint(self, packet_data):
         # ‘z type,addr,kind’

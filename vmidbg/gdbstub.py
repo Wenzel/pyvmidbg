@@ -51,6 +51,7 @@ class GDBCmd(Enum):
     WRITE_DATA_MEMORY = 'X'
     CONTINUE = 'c'
     SINGLESTEP = 's'
+    IS_THREAD_ALIVE = 'T'
     REMOVE_XPOINT = 'z'
     INSERT_XPOINT = 'Z'
     BREAKIN = '\x03'
