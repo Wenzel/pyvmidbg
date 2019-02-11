@@ -46,3 +46,6 @@ class RawDebugContext:
 
     def list_threads(self):
         return self.threads
+
+    def get_current_thread(self):
+        return self.threads[self.cur_tid_idx]

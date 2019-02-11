@@ -152,7 +152,7 @@ class LibVMIStub(GDBStub):
             return True
         if re.match(b'C', packet_data):
             # return current thread id
-            self.send_packet(GDBPacket(b'QC%x' % self.ctx.list_threads()[self.ctx.cur_tid_idx].id))
+            self.send_packet(GDBPacket(b'QC%x' % self.ctx.get_current_thread().id))
             return True
         m = re.match(b'Xfer:memory-map:read::(?P<offset>.*),(?P<length>.*)', packet_data)
         if m:
