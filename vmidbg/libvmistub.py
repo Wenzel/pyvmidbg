@@ -23,21 +23,8 @@ class LibVMIStub(GDBStub):
 
     def __init__(self, conn, addr, vm_name, process):
         super().__init__(conn, addr)
-        # init LibVMI
-        self.vmi = Libvmi(vm_name, init_flags=INIT_DOMAINNAME | INIT_EVENTS, partial=True)
-        self.vmi.init_paging(flags=0)
+        self.vm_name = vm_name
         self.process = process
-        if self.process:
-            self.vmi.init_os()
-            ostype = self.vmi.get_ostype()
-            if ostype == VMIOS.WINDOWS:
-                self.ctx = WindowsDebugContext(self.vmi, self.process)
-            elif ostype == VMIOS.LINUX:
-                self.ctx = LinuxDebugContext(self.vmi, self.process)
-            else:
-                raise RuntimeError('unhandled ostype: {}'.format(ostype.value))
-        else:
-            self.ctx = RawDebugContext(self.vmi)
         self.cmd_to_handler = {
             GDBCmd.GEN_QUERY_GET: self.gen_query_get,
             GDBCmd.GEN_QUERY_SET: self.gen_query_set,
@@ -76,15 +63,6 @@ class LibVMIStub(GDBStub):
         self.addr_to_op = {}
         self.stop_listen = threading.Event()
         self.pool = ThreadPoolExecutor(max_workers=1)
-        # register some events
-        # register interrupt event
-        self.int_event = IntEvent(self.cb_on_int3)
-        self.vmi.register_event(self.int_event)
-        # single step event to handle wrong hits by sw breakpoints
-        # enabled via EventResponse.TOGGLE_SINGLESTEP
-        num_vcpus = self.vmi.get_num_vcpus()
-        self.ss_event_recoil = SingleStepEvent(range(num_vcpus), self.cb_on_sstep_recoil, enable=False)
-        self.vmi.register_event(self.ss_event_recoil)
         # store the last addr where a swbreakpoint was hit
         # but it was not our targeted process
         # used in cb_on_sstep_recoil to restore the breakpoint after
@@ -92,14 +70,45 @@ class LibVMIStub(GDBStub):
         self.last_addr_wrong_swbreak = None
 
     def __enter__(self):
-        self.ctx.attach()
-        self.attached = True
+        # init LibVMI
+        self.vmi = Libvmi(self.vm_name, init_flags=INIT_DOMAINNAME | INIT_EVENTS, partial=True)
+        self.vmi.init_paging(flags=0)
+        try:
+            # determine debug context
+            if not self.process:
+                self.ctx = RawDebugContext(self.vmi)
+            else:
+                self.vmi.init_os()
+                ostype = self.vmi.get_ostype()
+                if ostype == VMIOS.WINDOWS:
+                    self.ctx = WindowsDebugContext(self.vmi, self.process)
+                elif ostype == VMIOS.LINUX:
+                    self.ctx = LinuxDebugContext(self.vmi, self.process)
+                else:
+                    raise RuntimeError('unhandled ostype: {}'.format(ostype.value))
+            # register some events
+            # register interrupt event
+            self.int_event = IntEvent(self.cb_on_int3)
+            self.vmi.register_event(self.int_event)
+            # single step event to handle wrong hits by sw breakpoints
+            # enabled via EventResponse.TOGGLE_SINGLESTEP
+            num_vcpus = self.vmi.get_num_vcpus()
+            self.ss_event_recoil = SingleStepEvent(range(num_vcpus), self.cb_on_sstep_recoil, enable=False)
+            self.vmi.register_event(self.ss_event_recoil)
+            self.ctx.attach()
+            self.attached = True
+        except Exception as e:
+            logging.exception('Exception while initializing debug context')
         return self
 
     def __exit__(self, type, value, traceback):
-        self.ctx.detach()
-        self.attached = False
-        self.vmi.destroy()
+        try:
+            self.ctx.detach()
+            self.attached = False
+        except Exception as e:
+            logging.exception('Exception while detaching from debug context')
+        finally:
+            self.vmi.destroy()
         # TODO restore opcodes
 
     @lru_cache(maxsize=None)
