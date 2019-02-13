@@ -10,7 +10,6 @@ class LinuxThread:
         self.id = id
 
     def is_alive(self):
-        # always alive, it's a VCPU
         return True
 
 
@@ -48,6 +47,9 @@ class LinuxDebugContext:
         pattern = re.escape(self.target_name)
         found = [desc for desc in self.list_processes() if re.match(pattern, desc.name)]
         if not found:
+            logging.debug('%s not found in process list:', self.target_name)
+            for desc in self.list_processes():
+                logging.debug(desc)
             raise RuntimeError('Could not find process')
         if len(found) > 1:
             logging.warning('Found multiple processes matching %s, picking the first match', self.target_name)
