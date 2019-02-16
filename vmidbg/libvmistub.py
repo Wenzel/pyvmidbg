@@ -11,7 +11,6 @@ from libvmi import Libvmi, INIT_DOMAINNAME, INIT_EVENTS, VMIOS, LibvmiError, X86
 from libvmi.event import EventResponse, SingleStepEvent, IntEvent
 
 from .gdbstub import GDBStub, GDBPacket, GDBCmd, GDBSignal, PACKET_SIZE
-from .debugcontext import dtb_to_pname
 from .rawdebugcontext import RawDebugContext
 from .linuxdebugcontext import LinuxDebugContext
 from .windowsdebugcontext import WindowsDebugContext
