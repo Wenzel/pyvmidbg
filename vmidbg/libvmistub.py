@@ -73,6 +73,8 @@ class LibVMIStub(GDBStub):
         # init LibVMI
         self.vmi = Libvmi(self.vm_name, init_flags=INIT_DOMAINNAME | INIT_EVENTS, partial=True)
         self.vmi.init_paging(flags=0)
+        # catch every exception to force a clean exit with __exit__
+        # where vmi.destroy() must be called
         try:
             # determine debug context
             if not self.process:
@@ -97,7 +99,7 @@ class LibVMIStub(GDBStub):
             self.vmi.register_event(self.ss_event_recoil)
             self.ctx.attach()
             self.attached = True
-        except Exception as e:
+        except:
             logging.exception('Exception while initializing debug context')
         return self
 
@@ -105,7 +107,7 @@ class LibVMIStub(GDBStub):
         try:
             self.ctx.detach()
             self.attached = False
-        except Exception as e:
+        except:
             logging.exception('Exception while detaching from debug context')
         finally:
             self.vmi.destroy()
@@ -468,8 +470,8 @@ class LibVMIStub(GDBStub):
             # check if it's our targeted process
             dtb = event.cffi_event.x86_regs.cr3
             if dtb != self.ctx.get_dtb():
-                pname = dtb_to_pname(vmi, dtb)
-                self.log.debug('wrong process: %s', pname)
+                desc = self.ctx.dtb_to_desc(dtb)
+                self.log.debug('wrong process: %s', desc.name)
                 # store current address to restore breakpoint in cb_sstep_recoil
                 self.last_addr_wrong_swbreak = addr
                 # restore original opcode
