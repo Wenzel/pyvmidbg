@@ -32,10 +32,16 @@ class GDBServer:
         self.sock.listen(MAX_CLIENTS)
         self.log.info('listening on %s:%d', self.address, self.port)
 
-        while True:
-            conn, addr = self.sock.accept()
-            self.log.info('new client %s', addr)
-            with self.stub_cls(conn, addr, *self.stub_args) as client:
-                client.handle_rsp()
+        do_listen = True
+        while do_listen:
+            self.log.debug('ready for next client')
+            try:
+                conn, addr = self.sock.accept()
+                self.log.info('new client %s', addr)
+                with self.stub_cls(conn, addr, *self.stub_args) as client:
+                    client.handle_rsp()
+            except KeyboardInterrupt:
+                do_listen = False
             # future = self.pool.submit(client.handle_connexion)
             # self.future_to_client[future] = client
+        self.log.info('closing server')
