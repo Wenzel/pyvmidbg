@@ -25,7 +25,8 @@ class LinuxTaskDescriptor:
         # task_struct->mm->pgd
         if self.mm:
             dtb_addr = self.vmi.read_addr_va(self.mm + self.vmi.get_offset('linux_pgd'), 0)
-            self.dtb = self.vmi.read_32_va(dtb_addr, 0)
+            # convert dtb into a machine address
+            self.dtb = self.vmi.translate_kv2p(dtb_addr)
         else:
             # kernel thread
             self.dtb = 0
@@ -74,22 +75,10 @@ class LinuxDebugContext:
         def cb_on_cr3_load(vmi, event):
             # TODO find process by matching CR3 directly
             # it doesn't work for now
-            # desc = self.dtb_to_desc(event.cffi_event.reg_event.value)
-            # self.log.info('intercepted %s', desc.name)
-            # if desc.dtb == self.target_desc.dtb:
-            #     vmi.pause_vm()
-            #     cb_data['interrupted'] = True
-
-            # find pid
-            pid = self.vmi.dtb_to_pid(event.cffi_event.reg_event.value)
-            # find desc
-            found = [desc for desc in self.list_processes() if desc.pid == pid]
-            if len(found) > 1:
-                raise RuntimeError('Multiple tasks have same PID')
-            desc = found[0]
-            self.log.info('intercepted [%s]: %s', desc.pid, desc.name)
-            if desc.pid == self.target_desc.pid:
-                self.vmi.pause_vm()
+            desc = self.dtb_to_desc(event.cffi_event.reg_event.value)
+            self.log.info('intercepted %s', desc)
+            if desc.dtb == self.target_desc.dtb:
+                vmi.pause_vm()
                 cb_data['interrupted'] = True
 
         reg_event = RegEvent(X86Reg.CR3, RegAccess.W, cb_on_cr3_load)
@@ -132,7 +121,6 @@ class LinuxDebugContext:
 
     def dtb_to_desc(self, dtb):
         for desc in self.list_processes():
-            self.log.debug('dtb_to_desc: %s, %s <=> %s', desc.name, hex(desc.dtb), hex(dtb))
             if desc.dtb == dtb:
                 return desc
         raise RuntimeError('Could not find task descriptor for DTB {}'.format(hex(dtb)))
