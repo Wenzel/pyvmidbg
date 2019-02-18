@@ -27,6 +27,25 @@ your favorite GDB frontend.
 By leveraging *virtual machine introspection*, the stub remains **stealth** and requires 
 **no modification** of the guest.
 
+### Why debugging from the hypervisor ?
+
+Operating systems debug API's are problematic:
+
+1. they have never been designed to deal with malwares, and lack the stealth and robustness required when 
+analyzing malicious code
+2. they have an observer effect, by implicitly modifying the process environment being debugged
+3. this observer effect might be intentional to protect OS features (`Windows PatchGuard`/`Protected Media Path` are disabled)
+4. modern OS have a high degree of kernel security mechanisms that narrows the debugger's view of the system
+ (`Windows 10 Virtual Secure Mode`)
+5. debugging low-level processes and kernel functions interacting directly with the transport protocol used by the debug agent can
+    turn into a infinite recursion hell (eg. debugging TCP connections and having a kernel debug stub communicating via TCP)
+5. in special cases the "Operating System" lacks debugging capabilities (`unikernels`)
+
+### Why guest awareness ?
+
+Existing solutions like GDB stubs included in `QEMU`, `VMware` or `VirtualBox` can only
+pause the VM and debug the kernel, but lack the guest knowledge to track and follow the rest of the processes.
+
 ![vmidbg](https://user-images.githubusercontent.com/964610/48309807-87ff5680-e581-11e8-8b4c-556462d09f60.png)
 
 ## Features
