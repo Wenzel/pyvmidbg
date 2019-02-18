@@ -73,8 +73,6 @@ class LinuxDebugContext:
         }
 
         def cb_on_cr3_load(vmi, event):
-            # TODO find process by matching CR3 directly
-            # it doesn't work for now
             desc = self.dtb_to_desc(event.cffi_event.reg_event.value)
             self.log.info('intercepted %s', desc)
             if desc.dtb == self.target_desc.dtb:
