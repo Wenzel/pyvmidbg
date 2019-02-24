@@ -32,17 +32,17 @@ class WindowsTaskDescriptor:
         self.vmi = vmi
         self.rekall = rekall
         self.rekall_task = self.rekall['$STRUCTS']['_EPROCESS'][1]
-        thread_list_off = self.rekall_task['ThreadListHead'][0]
         self.addr = task_addr - self.vmi.get_offset('win_tasks')
         self.dtb = self.vmi.read_32_va(self.addr + self.vmi.get_offset('win_pdbase'), 0)
         self.pid = self.vmi.read_32_va(self.addr + self.vmi.get_offset('win_pid'), 0)
         self.name = self.vmi.read_str_va(self.addr + self.vmi.get_offset('win_pname'), 0)
-        self.thread_head = self.vmi.read_addr_va(self.addr + thread_list_off, 0)
+        self.thread_head = self.addr + self.rekall_task['ThreadListHead'][0]
+        self.thread_head_entry = self.vmi.read_addr_va(self.addr + self.rekall_task['ThreadListHead'][0], 0)
         self.next_task = self.vmi.read_addr_va(self.addr + self.vmi.get_offset('win_tasks'), 0)
         self.next_desc = self.next_task - self.vmi.get_offset('win_tasks')
 
     def list_threads(self):
-        thread_list_entry = self.thread_head
+        thread_list_entry = self.thread_head_entry
         while True:
             desc = WindowsThread(thread_list_entry, self.vmi, self.rekall)
             yield desc
@@ -94,9 +94,10 @@ class WindowsDebugContext:
             self.log.warning('Found %s processes matching "%s", picking the first match ([%s])',
                             len(found), self.target_name, found[0].pid)
         self.target_desc = found[0]
+        self.log.info('Process: {}'.format(self.target_desc))
         # 4 - enumerate threads
         for thread in self.list_threads():
-            self.log.info(thread)
+            self.log.info('Thread: {}'.format(thread))
 
     def list_processes(self):
         head_task = self.vmi.translate_ksym2v('PsActiveProcessHead')
