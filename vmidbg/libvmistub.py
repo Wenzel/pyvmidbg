@@ -369,9 +369,16 @@ class LibVMIStub(GDBStub):
         m = re.match(b'(?P<tid>.+)', packet_data)
         if m:
             tid = int(m.group('tid'), 16)
-            status = self.ctx.list_threads()[tid-1].is_alive()
+            found = [thread for thread in self.ctx.list_threads() if thread.id == tid]
+            if not found:
+                # TODO Err XX
+                return False
+            if len(found) > 2:
+                self.log.warning('Multiple threads matching same id')
+                return False
+            thread = found[0]
             reply = None
-            if status:
+            if thread.is_alive():
                 reply = b'OK'
             else:
                 # TODO thread is dead

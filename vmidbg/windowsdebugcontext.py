@@ -23,7 +23,8 @@ class WindowsThread:
         return True
 
     def __str__(self):
-        return "[{}] - addr: {}, start_address: {}, win32_start_address: {}".format(self.id, hex(self.addr), hex(self.start_addr), hex(self.win32_start_addr))
+        return "[{}] - addr: {}, start_address: {}, win32_start_address: {}"\
+            .format(self.id, hex(self.addr), hex(self.start_addr), hex(self.win32_start_addr))
 
 
 class WindowsTaskDescriptor:
@@ -52,7 +53,7 @@ class WindowsTaskDescriptor:
                 break
 
     def __str__(self):
-        return "[{}] {} @{}".format(self.pid, self.name, hex(self.addr))
+        return "[{}] {} {}".format(self.pid, self.name, hex(self.addr))
 
 
 class WindowsDebugContext:
@@ -76,7 +77,7 @@ class WindowsDebugContext:
             profile = json.load(f)
             ps_head_rva = profile['$CONSTANTS']['PsActiveProcessHead']
             ps_head_va = self.vmi.translate_ksym2v('PsActiveProcessHead')
-            self.log.info('kernel base: @%s', hex(ps_head_va - ps_head_rva))
+            self.log.info('kernel base: %s', hex(ps_head_va - ps_head_rva))
 
     def attach(self):
         # 1 - pause to get a consistent memory access
@@ -92,7 +93,7 @@ class WindowsDebugContext:
             raise RuntimeError('Could not find process')
         if len(found) > 1:
             self.log.warning('Found %s processes matching "%s", picking the first match ([%s])',
-                            len(found), self.target_name, found[0].pid)
+                             len(found), self.target_name, found[0].pid)
         self.target_desc = found[0]
         self.log.info('Process: {}'.format(self.target_desc))
         # 4 - enumerate threads
