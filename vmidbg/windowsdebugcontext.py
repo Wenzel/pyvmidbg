@@ -1,9 +1,22 @@
 import logging
 import json
 import re
+import struct
+from enum import Enum
 
 from libvmi import AccessContext, TranslateMechanism, X86Reg, VMIWinVer
 from libvmi.event import RegEvent, RegAccess
+
+
+class ThreadState(Enum):
+    INITIALIZED = 0
+    READY = 1
+    RUNNING = 2
+    STANDBY = 3
+    TERMINATED = 4
+    WAIT = 5
+    TRANSITION = 6
+    UNKNOWN = 7
 
 
 class WindowsThread:
@@ -19,12 +32,28 @@ class WindowsThread:
         self.start_addr = self.vmi.read_addr_va(self.addr + self.rekall_thread['StartAddress'][0], 0)
         self.win32_start_addr = self.vmi.read_addr_va(self.addr + self.rekall_thread['Win32StartAddress'][0], 0)
 
+        self.State = ThreadState(int.from_bytes(self.read_field('State', '_KTHREAD'), byteorder='little'))
+
+    def read_field(self, field_name, struct_name='_ETHREAD'):
+        field_info = self.rekall['$STRUCTS'][struct_name][1][field_name]
+        offset, data_type = field_info
+        # ignore target
+        data_type = data_type[0]
+        format = None
+        if data_type == 'unsigned char':
+            format = 'B'
+        count = struct.calcsize(format)
+        buffer, bytes_read = self.vmi.read_va(self.addr + offset, 0, count)
+        if bytes_read != count:
+            raise RuntimeError('Failed to read field')
+        return buffer
+
     def is_alive(self):
         return True
 
     def __str__(self):
-        return "[{}] - addr: {}, start_address: {}, win32_start_address: {}"\
-            .format(self.id, hex(self.addr), hex(self.start_addr), hex(self.win32_start_addr))
+        return "[{}] - addr: {}, start_address: {}, state: {}"\
+            .format(self.id, hex(self.addr), hex(self.start_addr), self.State.name)
 
 
 class WindowsTaskDescriptor:
