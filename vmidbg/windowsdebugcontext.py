@@ -4,7 +4,7 @@ import re
 import struct
 from enum import Enum
 
-from libvmi import AccessContext, TranslateMechanism, X86Reg, VMIWinVer
+from libvmi import AccessContext, TranslateMechanism, Registers, X86Reg, VMIWinVer
 from libvmi.event import RegEvent, RegAccess
 
 
@@ -22,6 +22,7 @@ class ThreadState(Enum):
 class WindowsThread:
 
     def __init__(self, thread_list_entry, vmi, rekall):
+        self.log = logging.getLogger(__class__.__name__)
         self.vmi = vmi
         self.rekall = rekall
         self.rekall_thread = self.rekall['$STRUCTS']['_ETHREAD'][1]
@@ -32,21 +33,47 @@ class WindowsThread:
         self.start_addr = self.vmi.read_addr_va(self.addr + self.rekall_thread['StartAddress'][0], 0)
         self.win32_start_addr = self.vmi.read_addr_va(self.addr + self.rekall_thread['Win32StartAddress'][0], 0)
 
-        self.State = ThreadState(int.from_bytes(self.read_field('State', '_KTHREAD'), byteorder='little'))
+        self.State = ThreadState(self.read_field(self.addr, 'State', '_KTHREAD'))
+        # read KTRAP_FRAME
+        self.ktrap_frame_addr = self.read_field(self.addr, 'TrapFrame', '_KTHREAD')
 
-    def read_field(self, field_name, struct_name='_ETHREAD'):
+    def read_field(self, from_addr, field_name, struct_name='_ETHREAD'):
         field_info = self.rekall['$STRUCTS'][struct_name][1][field_name]
         offset, data_type = field_info
         # ignore target
         data_type = data_type[0]
         format = None
         if data_type == 'unsigned char':
-            format = 'B'
+            format = '=B'
+        elif data_type == 'unsigned long':
+            format = '=L'
+        else:
+            addr_width = self.vmi.get_address_width()
+            if addr_width == 4:
+                format = '=I'
+            else:
+                format = '=Q'
         count = struct.calcsize(format)
-        buffer, bytes_read = self.vmi.read_va(self.addr + offset, 0, count)
+        buffer, bytes_read = self.vmi.read_va(from_addr + offset, 0, count)
         if bytes_read != count:
             raise RuntimeError('Failed to read field')
-        return buffer
+        return int.from_bytes(buffer, byteorder='little')
+
+    def read_registers(self):
+        self.log.debug('%s: read registers', self.id)
+        if self.State == ThreadState.RUNNING:
+            # read from VCPU
+            raise RuntimeError('not implemented')
+        else:
+            regs = Registers()
+            regs[X86Reg.RAX] = self.read_field(self.ktrap_frame_addr, 'Eax', '_KTRAP_FRAME')
+            regs[X86Reg.RBX] = self.read_field(self.ktrap_frame_addr, 'Ebx', '_KTRAP_FRAME')
+            regs[X86Reg.RCX] = self.read_field(self.ktrap_frame_addr, 'Ecx', '_KTRAP_FRAME')
+            regs[X86Reg.RDX] = self.read_field(self.ktrap_frame_addr, 'Edx', '_KTRAP_FRAME')
+            regs[X86Reg.RSI] = self.read_field(self.ktrap_frame_addr, 'Esi', '_KTRAP_FRAME')
+            regs[X86Reg.RDI] = self.read_field(self.ktrap_frame_addr, 'Edi', '_KTRAP_FRAME')
+            regs[X86Reg.RIP] = self.read_field(self.ktrap_frame_addr, 'Eip', '_KTRAP_FRAME')
+            return regs
 
     def is_alive(self):
         return True
@@ -149,8 +176,19 @@ class WindowsDebugContext:
     def list_threads(self):
         return self.target_desc.list_threads()
 
-    def get_current_thread(self):
-        return next(self.target_desc.list_threads())
+    def get_thread(self, tid=None):
+        if not tid:
+            tid = self.cur_tid
+        if tid == -1:
+            # indicate all threads
+            # return first one
+            return next(self.list_threads())
+        found = [thread for thread in self.list_threads() if thread.id == tid]
+        if not found:
+            return None
+        if len(found) > 2:
+            self.log.warning('Multiple threads sharing same id')
+        return found[0]
 
     def get_access_context(self, address):
         return AccessContext(TranslateMechanism.PROCESS_PID,

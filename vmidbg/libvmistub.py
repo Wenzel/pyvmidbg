@@ -162,7 +162,7 @@ class LibVMIStub(GDBStub):
             return True
         if re.match(b'C', packet_data):
             # return current thread id
-            self.send_packet(GDBPacket(b'QC%x' % self.ctx.get_current_thread().id))
+            self.send_packet(GDBPacket(b'QC%x' % self.ctx.cur_tid))
             return True
         m = re.match(b'Xfer:memory-map:read::(?P<offset>.*),(?P<length>.*)', packet_data)
         if m:
@@ -195,6 +195,7 @@ class LibVMIStub(GDBStub):
         if m:
             op = m.group('op')
             tid = int(m.group('tid'), 16)
+            self.log.debug('Current thread: %s', tid)
             self.ctx.cur_tid = tid
             # TODO op, Enn
             self.send_packet(GDBPacket(b'OK'))
@@ -213,8 +214,9 @@ class LibVMIStub(GDBStub):
         else:
             pack_fmt = '@Q'
 
-        # TODO VCPU 0
-        regs = self.vmi.get_vcpuregs(0)
+        cur_thread = self.ctx.get_thread()
+        regs = cur_thread.read_registers()
+
         gen_regs_32 = [
             X86Reg.RAX, X86Reg.RCX, X86Reg.RDX, X86Reg.RBX,
             X86Reg.RSP, X86Reg.RBP, X86Reg.RSI, X86Reg.RDI, X86Reg.RIP
@@ -369,14 +371,10 @@ class LibVMIStub(GDBStub):
         m = re.match(b'(?P<tid>.+)', packet_data)
         if m:
             tid = int(m.group('tid'), 16)
-            found = [thread for thread in self.ctx.list_threads() if thread.id == tid]
-            if not found:
+            thread = self.ctx.get_thread(tid)
+            if not thread:
                 # TODO Err XX
                 return False
-            if len(found) > 2:
-                self.log.warning('Multiple threads matching same id')
-                return False
-            thread = found[0]
             reply = None
             if thread.is_alive():
                 reply = b'OK'
