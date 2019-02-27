@@ -41,12 +41,12 @@ analyzing malicious code
     turn into a infinite recursion hell (eg. debugging TCP connections and having a kernel debug stub communicating via TCP)
 5. in special cases the "Operating System" lacks debugging capabilities (`unikernels`)
 
-### Why guest awareness ?
-
 Existing solutions like GDB stubs included in `QEMU`, `VMware` or `VirtualBox` can only
 pause the VM and debug the kernel, but lack the guest knowledge to track and follow the rest of the processes.
 
-![vmidbg](https://user-images.githubusercontent.com/964610/48309807-87ff5680-e581-11e8-8b4c-556462d09f60.png)
+### Vision
+
+![vmidbg](https://user-images.githubusercontent.com/964610/53520440-f71f9d00-3ad5-11e9-9f5d-216fc7a2bae4.png)
 
 ## Features
 
