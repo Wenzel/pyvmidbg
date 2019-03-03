@@ -46,7 +46,7 @@ pause the VM and debug the kernel, but lack the guest knowledge to track and fol
 
 ### Vision
 
-![vmidbg](https://user-images.githubusercontent.com/964610/53520440-f71f9d00-3ad5-11e9-9f5d-216fc7a2bae4.png)
+![vmidbg](https://user-images.githubusercontent.com/964610/53703373-9fed3580-3e11-11e9-96f8-47b3f38044cf.jpg)
 
 ## Features
 
