@@ -134,6 +134,8 @@ class WindowsDebugContext:
             ps_head_rva = profile['$CONSTANTS']['PsActiveProcessHead']
             ps_head_va = self.vmi.translate_ksym2v('PsActiveProcessHead')
             self.log.info('kernel base: %s', hex(ps_head_va - ps_head_rva))
+        # default thread: all threads
+        self.cur_tid = -1
 
     def attach(self):
         # 1 - pause to get a consistent memory access
@@ -185,6 +187,7 @@ class WindowsDebugContext:
             return next(self.list_threads())
         found = [thread for thread in self.list_threads() if thread.id == tid]
         if not found:
+            self.log.warning('Cannot find thread ID %s', tid)
             return None
         if len(found) > 2:
             self.log.warning('Multiple threads sharing same id')
