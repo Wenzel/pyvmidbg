@@ -73,6 +73,8 @@ class WindowsThread:
             regs[X86Reg.RSI] = self.read_field(self.ktrap_frame_addr, 'Esi', '_KTRAP_FRAME')
             regs[X86Reg.RDI] = self.read_field(self.ktrap_frame_addr, 'Edi', '_KTRAP_FRAME')
             regs[X86Reg.RIP] = self.read_field(self.ktrap_frame_addr, 'Eip', '_KTRAP_FRAME')
+            regs[X86Reg.RBP] = self.read_field(self.ktrap_frame_addr, 'Ebp', '_KTRAP_FRAME')
+            regs[X86Reg.RSP] = self.read_field(self.addr, 'KernelStack', '_KTHREAD')
             return regs
 
     def is_alive(self):
@@ -181,9 +183,10 @@ class WindowsDebugContext:
     def get_thread(self, tid=None):
         if not tid:
             tid = self.cur_tid
-        if tid == -1:
-            # indicate all threads
-            # return first one
+        if tid == -1 or tid == 0:
+            # -1: indicate all threads
+            # 0: pick any thread
+            # return first one for now
             return next(self.list_threads())
         found = [thread for thread in self.list_threads() if thread.id == tid]
         if not found:
