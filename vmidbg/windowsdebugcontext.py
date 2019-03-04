@@ -192,7 +192,7 @@ class WindowsDebugContext:
         if not found:
             self.log.warning('Cannot find thread ID %s', tid)
             return None
-        if len(found) > 2:
+        if len(found) > 1:
             self.log.warning('Multiple threads sharing same id')
         return found[0]
 
@@ -205,3 +205,12 @@ class WindowsDebugContext:
 
     def detach(self):
         self.vmi.resume_vm()
+
+    def dtb_to_desc(self, dtb):
+        found = [desc for desc in self.list_processes() if desc.dtb == dtb]
+        if not found:
+            raise RuntimeError('Could not find task descriptor for DTB {}'.format(hex(dtb)))
+        if len(found) > 1:
+            self.log.warning('multiple processes matching same DTB !')
+        desc = found[0]
+        return desc
