@@ -454,6 +454,11 @@ class LibVMIStub(GDBStub):
 
     def cb_on_int3(self, vmi, event):
         self.log.debug('cb_on_int3')
+        # invalidate libvmi caches
+        self.vmi.v2pcache_flush()
+        self.vmi.pidcache_flush()
+        self.vmi.rvacache_flush()
+        self.vmi.symcache_flush()
         # set default reinject behavior
         event.reinject = 0
         addr = event.cffi_event.x86_regs.rip
