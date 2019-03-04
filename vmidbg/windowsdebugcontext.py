@@ -16,7 +16,8 @@ class ThreadState(Enum):
     TERMINATED = 4
     WAIT = 5
     TRANSITION = 6
-    UNKNOWN = 7
+    DEFERRED_READY = 7
+    GATE_WAIT = 8
 
 
 class WindowsThread:
@@ -60,10 +61,9 @@ class WindowsThread:
         return int.from_bytes(buffer, byteorder='little')
 
     def read_registers(self):
-        self.log.debug('%s: read registers', self.id)
+        self.log.debug('%s: read registers (state: %s)', self.id, self.State)
         if self.State == ThreadState.RUNNING:
-            # read from VCPU
-            raise RuntimeError('not implemented')
+            return self.vmi.get_vcpuregs(0)
         else:
             regs = Registers()
             regs[X86Reg.RAX] = self.read_field(self.ktrap_frame_addr, 'Eax', '_KTRAP_FRAME')
