@@ -196,6 +196,17 @@ class WindowsDebugContext:
             self.log.warning('Multiple threads sharing same id')
         return found[0]
 
+    def get_current_running_thread(self):
+        # TODO use KPCR
+        found = [thread for thread in self.list_threads() if thread.State ==
+                ThreadState.RUNNING]
+        if not found:
+            self.log.warning('Cannot find current running thread %s', tid)
+            return None
+        if len(found) > 1:
+            self.log.warning('Multiple threads running')
+        return found[0]
+
     def get_access_context(self, address):
         return AccessContext(TranslateMechanism.PROCESS_PID,
                              addr=address, pid=self.target_desc.pid)

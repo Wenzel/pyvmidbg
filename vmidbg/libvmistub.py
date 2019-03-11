@@ -492,8 +492,14 @@ class LibVMIStub(GDBStub):
                 # pause
                 self.vmi.pause_vm()
                 self.stop_listen.set()
+                thread = self.ctx.get_current_running_thread()
+                if not thread:
+                    tid = -1
+                else:
+                    tid = thread.id
                 # report swbreak stop to client
-                self.send_packet_noack(GDBPacket(b'T%.2xswbreak:;' % GDBSignal.TRAP.value))
+                self.send_packet_noack(GDBPacket(b'T%.2xswbreak:;thread:%x;' %
+                    (GDBSignal.TRAP.value, tid)))
 
     def v_features(self, packet_data):
         if re.match(b'MustReplyEmpty', packet_data):
