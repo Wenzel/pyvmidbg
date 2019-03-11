@@ -155,6 +155,14 @@ class LibVMIStub(GDBStub):
             # send end of thread list
             self.send_packet(GDBPacket(b'l'))
             return True
+        m = re.match(b'ThreadExtraInfo,(?P<thread_id>.+)', packet_data)
+        if m:
+            tid = int(m.group('thread_id'), 16)
+            thread = self.ctx.get_thread(tid)
+            if not thread:
+                return False
+            self.send_packet(GDBPacket(thread.name.encode()))
+            return True
         if re.match(b'Attached', packet_data):
             # attach existing process: 0
             # attach new process: 1
