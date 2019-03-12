@@ -46,6 +46,7 @@ class GDBCmd(Enum):
     READ_REGISTERS = 'g'
     WRITE_REGISTERS = 'G'
     DETACH = 'D'
+    KILL_REQUEST = 'k'
     READ_MEMORY = 'm'
     WRITE_MEMORY = 'M'
     WRITE_DATA_MEMORY = 'X'

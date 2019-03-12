@@ -42,6 +42,7 @@ class LibVMIStub(GDBStub):
             GDBCmd.INSERT_XPOINT: self.insert_xpoint,
             GDBCmd.BREAKIN: self.breakin,
             GDBCmd.V_FEATURES: self.v_features,
+            GDBCmd.KILL_REQUEST: self.kill_request,
         }
         self.features = {
             b'multiprocess': False,
@@ -213,6 +214,10 @@ class LibVMIStub(GDBStub):
     def target_status(self, packet_data):
         msg = b'S%.2x' % GDBSignal.TRAP.value
         self.send_packet(GDBPacket(msg))
+        return True
+
+    def kill_request(self, packet_data):
+        self.attached = False
         return True
 
     def read_registers(self, packet_data):
