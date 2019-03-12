@@ -37,7 +37,7 @@ class WindowsThread:
         self.State = ThreadState(self.read_field(self.addr, 'State', '_KTHREAD'))
         # read KTRAP_FRAME
         self.ktrap_frame_addr = self.read_field(self.addr, 'TrapFrame', '_KTHREAD')
-        self.name = "ETHREAD {}".format(self.id)
+        self.name = "0"
 
     def read_field(self, from_addr, field_name, struct_name='_ETHREAD'):
         field_info = self.rekall['$STRUCTS'][struct_name][1][field_name]
