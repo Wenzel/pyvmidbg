@@ -111,7 +111,10 @@ class LibVMIStub(GDBStub):
             logging.exception('Exception while detaching from debug context')
         finally:
             self.vmi.destroy()
-        # TODO restore opcodes
+        # restore opcodes
+        for addr in self.addr_to_op.keys():
+            self.toggle_swbreak(addr, False)
+
 
     @lru_cache(maxsize=None)
     def get_memory_map_xml(self):
