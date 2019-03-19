@@ -46,6 +46,7 @@ class GDBCmd(Enum):
     READ_REGISTERS = 'g'
     WRITE_REGISTERS = 'G'
     DETACH = 'D'
+    KILL_REQUEST = 'k'
     READ_MEMORY = 'm'
     WRITE_MEMORY = 'M'
     WRITE_DATA_MEMORY = 'X'
@@ -80,7 +81,7 @@ class GDBStub():
 
     def __init__(self, conn, addr):
         _, client_port = addr
-        self.log = logging.getLogger('client-{}'.format(client_port))
+        self.log = logging.getLogger(__class__.__name__)
         self.sock = conn
         self.addr = addr
         self.sock.setblocking(True)
@@ -177,7 +178,7 @@ class GDBStub():
         cmd, cmd_data = chr(packet_data[0]), packet_data[1:]
         try:
             gdb_cmd = GDBCmd(cmd)
-            logging.info('command %s: %s', gdb_cmd.value, gdb_cmd.name)
+            self.log.info('command %s: %s', gdb_cmd.value, gdb_cmd.name)
             handler = self.cmd_to_handler[gdb_cmd]
         except (ValueError, KeyError):
             self.log.info('unknown command {}'.format(cmd))

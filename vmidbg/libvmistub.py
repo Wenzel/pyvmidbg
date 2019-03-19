@@ -42,6 +42,7 @@ class LibVMIStub(GDBStub):
             GDBCmd.INSERT_XPOINT: self.insert_xpoint,
             GDBCmd.BREAKIN: self.breakin,
             GDBCmd.V_FEATURES: self.v_features,
+            GDBCmd.KILL_REQUEST: self.kill_request,
         }
         self.features = {
             b'multiprocess': False,
@@ -110,7 +111,10 @@ class LibVMIStub(GDBStub):
             logging.exception('Exception while detaching from debug context')
         finally:
             self.vmi.destroy()
-        # TODO restore opcodes
+        # restore opcodes
+        for addr in self.addr_to_op.keys():
+            self.toggle_swbreak(addr, False)
+
 
     @lru_cache(maxsize=None)
     def get_memory_map_xml(self):
@@ -155,6 +159,14 @@ class LibVMIStub(GDBStub):
             # send end of thread list
             self.send_packet(GDBPacket(b'l'))
             return True
+        m = re.match(b'ThreadExtraInfo,(?P<thread_id>.+)', packet_data)
+        if m:
+            tid = int(m.group('thread_id'), 16)
+            thread = self.ctx.get_thread(tid)
+            if not thread:
+                return False
+            self.send_packet(GDBPacket(thread.name.encode()))
+            return True
         if re.match(b'Attached', packet_data):
             # attach existing process: 0
             # attach new process: 1
@@ -162,7 +174,7 @@ class LibVMIStub(GDBStub):
             return True
         if re.match(b'C', packet_data):
             # return current thread id
-            self.send_packet(GDBPacket(b'QC%x' % self.ctx.get_current_thread().id))
+            self.send_packet(GDBPacket(b'QC%x' % self.ctx.cur_tid))
             return True
         m = re.match(b'Xfer:memory-map:read::(?P<offset>.*),(?P<length>.*)', packet_data)
         if m:
@@ -195,6 +207,7 @@ class LibVMIStub(GDBStub):
         if m:
             op = m.group('op')
             tid = int(m.group('tid'), 16)
+            self.log.debug('Current thread: %s', tid)
             self.ctx.cur_tid = tid
             # TODO op, Enn
             self.send_packet(GDBPacket(b'OK'))
@@ -206,6 +219,10 @@ class LibVMIStub(GDBStub):
         self.send_packet(GDBPacket(msg))
         return True
 
+    def kill_request(self, packet_data):
+        self.attached = False
+        return True
+
     def read_registers(self, packet_data):
         addr_width = self.vmi.get_address_width()
         if addr_width == 4:
@@ -213,8 +230,9 @@ class LibVMIStub(GDBStub):
         else:
             pack_fmt = '@Q'
 
-        # TODO VCPU 0
-        regs = self.vmi.get_vcpuregs(0)
+        cur_thread = self.ctx.get_thread()
+        regs = cur_thread.read_registers()
+
         gen_regs_32 = [
             X86Reg.RAX, X86Reg.RCX, X86Reg.RDX, X86Reg.RBX,
             X86Reg.RSP, X86Reg.RBP, X86Reg.RSI, X86Reg.RDI, X86Reg.RIP
@@ -369,9 +387,12 @@ class LibVMIStub(GDBStub):
         m = re.match(b'(?P<tid>.+)', packet_data)
         if m:
             tid = int(m.group('tid'), 16)
-            status = self.ctx.list_threads()[tid-1].is_alive()
+            thread = self.ctx.get_thread(tid)
+            if not thread:
+                # TODO Err XX
+                return False
             reply = None
-            if status:
+            if thread.is_alive():
                 reply = b'OK'
             else:
                 # TODO thread is dead
@@ -449,6 +470,11 @@ class LibVMIStub(GDBStub):
 
     def cb_on_int3(self, vmi, event):
         self.log.debug('cb_on_int3')
+        # invalidate libvmi caches
+        self.vmi.v2pcache_flush()
+        self.vmi.pidcache_flush()
+        self.vmi.rvacache_flush()
+        self.vmi.symcache_flush()
         # set default reinject behavior
         event.reinject = 0
         addr = event.cffi_event.x86_regs.rip
@@ -482,8 +508,14 @@ class LibVMIStub(GDBStub):
                 # pause
                 self.vmi.pause_vm()
                 self.stop_listen.set()
+                thread = self.ctx.get_current_running_thread()
+                if not thread:
+                    tid = -1
+                else:
+                    tid = thread.id
                 # report swbreak stop to client
-                self.send_packet_noack(GDBPacket(b'T%.2xswbreak:;' % GDBSignal.TRAP.value))
+                self.send_packet_noack(GDBPacket(b'T%.2xswbreak:;thread:%x;' %
+                    (GDBSignal.TRAP.value, tid)))
 
     def v_features(self, packet_data):
         if re.match(b'MustReplyEmpty', packet_data):
