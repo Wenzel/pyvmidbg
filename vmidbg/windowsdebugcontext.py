@@ -37,6 +37,7 @@ class WindowsThread:
         self.State = ThreadState(self.read_field(self.addr, 'State', '_KTHREAD'))
         # read KTRAP_FRAME
         self.ktrap_frame_addr = self.read_field(self.addr, 'TrapFrame', '_KTHREAD')
+        # TODO reply contains invalid digit
         self.name = "0"
 
     def read_field(self, from_addr, field_name, struct_name='_ETHREAD'):
@@ -200,7 +201,7 @@ class WindowsDebugContext:
     def get_current_running_thread(self):
         # TODO use KPCR
         found = [thread for thread in self.list_threads() if thread.State ==
-                ThreadState.RUNNING]
+                 ThreadState.RUNNING]
         if not found:
             self.log.warning('Cannot find current running thread %s', tid)
             return None

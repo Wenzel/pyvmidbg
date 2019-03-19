@@ -115,7 +115,6 @@ class LibVMIStub(GDBStub):
         for addr in self.addr_to_op.keys():
             self.toggle_swbreak(addr, False)
 
-
     @lru_cache(maxsize=None)
     def get_memory_map_xml(self):
         # retrieve list of maps
@@ -515,7 +514,7 @@ class LibVMIStub(GDBStub):
                     tid = thread.id
                 # report swbreak stop to client
                 self.send_packet_noack(GDBPacket(b'T%.2xswbreak:;thread:%x;' %
-                    (GDBSignal.TRAP.value, tid)))
+                                                 (GDBSignal.TRAP.value, tid)))
 
     def v_features(self, packet_data):
         if re.match(b'MustReplyEmpty', packet_data):
