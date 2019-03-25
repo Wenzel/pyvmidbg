@@ -6,6 +6,7 @@ from enum import Enum
 
 from libvmi import AccessContext, TranslateMechanism, Registers, X86Reg, VMIWinVer
 from libvmi.event import RegEvent, RegAccess
+from vmidbg.vmistruct import VMIStruct
 
 
 class ThreadState(Enum):
@@ -27,40 +28,17 @@ class WindowsThread:
         self.vmi = vmi
         self.rekall = rekall
         self.rekall_thread = self.rekall['$STRUCTS']['_ETHREAD'][1]
-        unique_thread_off = self.rekall['$STRUCTS']['_CLIENT_ID'][1]['UniqueThread'][0]
         self.addr = thread_list_entry - self.rekall_thread['ThreadListEntry'][0]
-        self.id = self.vmi.read_addr_va(self.addr + self.rekall_thread['Cid'][0] + unique_thread_off, 0)
-        self.next_entry = self.vmi.read_addr_va(self.addr + self.rekall_thread['ThreadListEntry'][0], 0)
-        self.start_addr = self.vmi.read_addr_va(self.addr + self.rekall_thread['StartAddress'][0], 0)
-        self.win32_start_addr = self.vmi.read_addr_va(self.addr + self.rekall_thread['Win32StartAddress'][0], 0)
+        self.ethread = VMIStruct(self.vmi, self.rekall['$STRUCTS'], '_ETHREAD', self.addr)
+        self.id = self.ethread.Cid.UniqueThread
+        self.next_entry = self.ethread.ThreadListEntry.Flink.addr
+        self.start_addr = self.ethread.StartAddress
+        self.win32_start_addr = self.ethread.Win32StartAddress
 
-        self.State = ThreadState(self.read_field(self.addr, 'State', '_KTHREAD'))
-        # read KTRAP_FRAME
-        self.ktrap_frame_addr = self.read_field(self.addr, 'TrapFrame', '_KTHREAD')
+        self.kthread = self.ethread.Tcb
+        self.State = ThreadState(self.kthread.State)
         # TODO reply contains invalid digit
         self.name = "0"
-
-    def read_field(self, from_addr, field_name, struct_name='_ETHREAD'):
-        field_info = self.rekall['$STRUCTS'][struct_name][1][field_name]
-        offset, data_type = field_info
-        # ignore target
-        data_type = data_type[0]
-        format = None
-        if data_type == 'unsigned char':
-            format = '=B'
-        elif data_type == 'unsigned long':
-            format = '=L'
-        else:
-            addr_width = self.vmi.get_address_width()
-            if addr_width == 4:
-                format = '=I'
-            else:
-                format = '=Q'
-        count = struct.calcsize(format)
-        buffer, bytes_read = self.vmi.read_va(from_addr + offset, 0, count)
-        if bytes_read != count:
-            raise RuntimeError('Failed to read field')
-        return int.from_bytes(buffer, byteorder='little')
 
     def read_registers(self):
         self.log.debug('%s: read registers (state: %s)', self.id, self.State)
@@ -68,15 +46,15 @@ class WindowsThread:
             return self.vmi.get_vcpuregs(0)
         else:
             regs = Registers()
-            regs[X86Reg.RAX] = self.read_field(self.ktrap_frame_addr, 'Eax', '_KTRAP_FRAME')
-            regs[X86Reg.RBX] = self.read_field(self.ktrap_frame_addr, 'Ebx', '_KTRAP_FRAME')
-            regs[X86Reg.RCX] = self.read_field(self.ktrap_frame_addr, 'Ecx', '_KTRAP_FRAME')
-            regs[X86Reg.RDX] = self.read_field(self.ktrap_frame_addr, 'Edx', '_KTRAP_FRAME')
-            regs[X86Reg.RSI] = self.read_field(self.ktrap_frame_addr, 'Esi', '_KTRAP_FRAME')
-            regs[X86Reg.RDI] = self.read_field(self.ktrap_frame_addr, 'Edi', '_KTRAP_FRAME')
-            regs[X86Reg.RIP] = self.read_field(self.ktrap_frame_addr, 'Eip', '_KTRAP_FRAME')
-            regs[X86Reg.RBP] = self.read_field(self.ktrap_frame_addr, 'Ebp', '_KTRAP_FRAME')
-            regs[X86Reg.RSP] = self.read_field(self.addr, 'KernelStack', '_KTHREAD')
+            regs[X86Reg.RAX] = self.kthread.TrapFrame.Eax
+            regs[X86Reg.RBX] = self.kthread.TrapFrame.Ebx
+            regs[X86Reg.RCX] = self.kthread.TrapFrame.Ecx
+            regs[X86Reg.RDX] = self.kthread.TrapFrame.Edx
+            regs[X86Reg.RSI] = self.kthread.TrapFrame.Esi
+            regs[X86Reg.RDI] = self.kthread.TrapFrame.Edi
+            regs[X86Reg.RIP] = self.kthread.TrapFrame.Eip
+            regs[X86Reg.RBP] = self.kthread.TrapFrame.Ebp
+            regs[X86Reg.RSP] = self.kthread.KernelStack
             return regs
 
     def is_alive(self):
