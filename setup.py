@@ -18,6 +18,7 @@ setup(
     author='Mathieu Tarral',
     author_email='mathieu.tarral@protonmail.com',
     url='https://github.com/Wenzel/pyvmidbg',
+    python_requires='>=3.4',
     setup_requires=[''],
     install_requires=['docopt', 'lxml', 'libvmi'],
     tests_require=["pytest", "pytest-pep8", "libvirt-python"],

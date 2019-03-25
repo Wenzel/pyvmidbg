@@ -62,7 +62,7 @@ pause the VM and debug the kernel, but lack the guest knowledge to track and fol
 
 ## Requirements
 
-- `Python 3`
+- `Python >= 3.4`
 - `python3-docopt`
 - `python3-lxml`
 - [`python3-libvmi`](https://github.com/libvmi/python)

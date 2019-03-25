@@ -6,7 +6,9 @@ from enum import Enum
 
 from libvmi import AccessContext, TranslateMechanism, Registers, X86Reg, VMIWinVer
 from libvmi.event import RegEvent, RegAccess
+
 from vmidbg.vmistruct import VMIStruct
+from vmidbg.abstractdebugcontext import AbstractDebugContext
 
 
 class ThreadState(Enum):
@@ -94,11 +96,11 @@ class WindowsTaskDescriptor:
         return "[{}] {} {}".format(self.pid, self.name, hex(self.addr))
 
 
-class WindowsDebugContext:
+class WindowsDebugContext(AbstractDebugContext):
 
     def __init__(self, vmi, process):
+        super().__init__(vmi)
         self.log = logging.getLogger(__class__.__name__)
-        self.vmi = vmi
         self.rekall = None
         with open(self.vmi.get_rekall_path()) as f:
             self.rekall = json.load(f)
@@ -140,25 +142,35 @@ class WindowsDebugContext:
         for thread in self.list_threads():
             self.log.info('Thread: {}'.format(thread))
 
-    def list_processes(self):
-        head_task = self.vmi.translate_ksym2v('PsActiveProcessHead')
-        task_addr = self.vmi.read_addr_va(head_task, 0)
-        while True:
-            desc = WindowsTaskDescriptor(task_addr, self.vmi, self.rekall)
-            yield desc
-            # read next task
-            task_addr = desc.next_task
-            if task_addr == head_task:
-                break
-        # Idle process ? (Window XP)
-        if self.vmi.get_winver() == VMIWinVer.OS_WINDOWS_XP:
-            idle_desc_addr = self.vmi.read_addr_ksym('PsIdleProcess')
-            desc = WindowsTaskDescriptor(idle_desc_addr + self.vmi.get_offset('win_tasks'), self.vmi,
-                                         self.rekall)
-            yield desc
+    def detach(self):
+        self.vmi.resume_vm()
 
-    def list_threads(self):
-        return self.target_desc.list_threads()
+    def get_dtb(self):
+        return self.target_desc.dtb
+
+    def dtb_to_desc(self, dtb):
+        found = [desc for desc in self.list_processes() if desc.dtb == dtb]
+        if not found:
+            raise RuntimeError('Could not find task descriptor for DTB {}'.format(hex(dtb)))
+        if len(found) > 1:
+            self.log.warning('multiple processes matching same DTB !')
+        desc = found[0]
+        return desc
+
+    def get_access_context(self, address):
+        return AccessContext(TranslateMechanism.PROCESS_PID,
+                             addr=address, pid=self.target_desc.pid)
+
+    def get_current_running_thread(self):
+        # TODO use KPCR
+        found = [thread for thread in self.list_threads() if thread.State ==
+                 ThreadState.RUNNING]
+        if not found:
+            self.log.warning('Cannot find current running thread %s', tid)
+            return None
+        if len(found) > 1:
+            self.log.warning('Multiple threads running')
+        return found[0]
 
     def get_thread(self, tid=None):
         if not tid:
@@ -176,32 +188,22 @@ class WindowsDebugContext:
             self.log.warning('Multiple threads sharing same id')
         return found[0]
 
-    def get_current_running_thread(self):
-        # TODO use KPCR
-        found = [thread for thread in self.list_threads() if thread.State ==
-                 ThreadState.RUNNING]
-        if not found:
-            self.log.warning('Cannot find current running thread %s', tid)
-            return None
-        if len(found) > 1:
-            self.log.warning('Multiple threads running')
-        return found[0]
+    def list_threads(self):
+        return self.target_desc.list_threads()
 
-    def get_access_context(self, address):
-        return AccessContext(TranslateMechanism.PROCESS_PID,
-                             addr=address, pid=self.target_desc.pid)
-
-    def get_dtb(self):
-        return self.target_desc.dtb
-
-    def detach(self):
-        self.vmi.resume_vm()
-
-    def dtb_to_desc(self, dtb):
-        found = [desc for desc in self.list_processes() if desc.dtb == dtb]
-        if not found:
-            raise RuntimeError('Could not find task descriptor for DTB {}'.format(hex(dtb)))
-        if len(found) > 1:
-            self.log.warning('multiple processes matching same DTB !')
-        desc = found[0]
-        return desc
+    def list_processes(self):
+        head_task = self.vmi.translate_ksym2v('PsActiveProcessHead')
+        task_addr = self.vmi.read_addr_va(head_task, 0)
+        while True:
+            desc = WindowsTaskDescriptor(task_addr, self.vmi, self.rekall)
+            yield desc
+            # read next task
+            task_addr = desc.next_task
+            if task_addr == head_task:
+                break
+        # Idle process ? (Window XP)
+        if self.vmi.get_winver() == VMIWinVer.OS_WINDOWS_XP:
+            idle_desc_addr = self.vmi.read_addr_ksym('PsIdleProcess')
+            desc = WindowsTaskDescriptor(idle_desc_addr + self.vmi.get_offset('win_tasks'), self.vmi,
+                                         self.rekall)
+            yield desc

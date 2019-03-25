@@ -2,6 +2,8 @@ import logging
 
 from libvmi import LibvmiError, X86Reg, AccessContext, TranslateMechanism
 
+from vmidbg.abstractdebugcontext import AbstractDebugContext
+
 
 class RawThread:
 
@@ -22,17 +24,15 @@ class RawThread:
         return self.vmi.get_vcpuregs(self.vcpu_id)
 
 
-class RawDebugContext:
+class RawDebugContext(AbstractDebugContext):
 
     def __init__(self, vmi):
+        super().__init__(vmi)
         self.log = logging.getLogger(__class__.__name__)
-        self.vmi = vmi
         # create threads
         self.threads = []
         for i in range(0, self.vmi.get_num_vcpus()):
             self.threads.append(RawThread(self.vmi, i+1))
-        # default thread: all threads
-        self.cur_tid = -1
 
     def attach(self):
         self.log.info('attaching on %s', self.vmi.get_name())

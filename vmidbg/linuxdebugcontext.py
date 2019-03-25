@@ -4,6 +4,8 @@ import re
 from libvmi import AccessContext, TranslateMechanism, X86Reg
 from libvmi.event import RegEvent, RegAccess
 
+from vmidbg.abstractdebugcontext import AbstractDebugContext
+
 
 class LinuxThread:
 
@@ -37,11 +39,11 @@ class LinuxTaskDescriptor:
         return "[{}] {} @{}".format(self.pid, self.name, hex(self.addr))
 
 
-class LinuxDebugContext:
+class LinuxDebugContext(AbstractDebugContext):
 
     def __init__(self, vmi, process):
+        super().__init__(vmi)
         self.log = logging.getLogger(__class__.__name__)
-        self.vmi = vmi
         self.target_name = process
         self.target_desc = None
         self.threads = [LinuxThread(1)]
@@ -93,12 +95,28 @@ class LinuxDebugContext:
     def detach(self):
         self.vmi.resume_vm()
 
+    def get_dtb(self):
+        return self.target_desc.dtb
+
+    def dtb_to_desc(self, dtb):
+        for desc in self.list_processes():
+            if desc.dtb == dtb:
+                return desc
+        raise RuntimeError('Could not find task descriptor for DTB {}'.format(hex(dtb)))
+
     def get_access_context(self, address):
         return AccessContext(TranslateMechanism.PROCESS_PID,
                              addr=address, pid=self.target_desc.pid)
 
-    def get_dtb(self):
-        return self.target_desc.dtb
+    def get_current_running_thread(self):
+        return self.threads[0]
+
+    def get_thread(self, tid=None):
+        # TODO
+        return None
+
+    def list_threads(self):
+        return self.threads
 
     def list_processes(self):
         head_desc = self.vmi.translate_ksym2v('init_task')
@@ -110,15 +128,3 @@ class LinuxDebugContext:
             desc_addr = desc.next_desc
             if desc_addr == head_desc:
                 break
-
-    def list_threads(self):
-        return self.threads
-
-    def get_current_thread(self):
-        return self.threads[0]
-
-    def dtb_to_desc(self, dtb):
-        for desc in self.list_processes():
-            if desc.dtb == dtb:
-                return desc
-        raise RuntimeError('Could not find task descriptor for DTB {}'.format(hex(dtb)))
