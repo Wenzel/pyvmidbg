@@ -132,6 +132,20 @@ class LibVMIStub(GDBStub):
         xml = etree.tostring(root, xml_declaration=True, doctype=doctype, encoding='UTF-8')
         return xml
 
+    def get_loaded_libraries_xml(self):
+        # hardcoded for test
+        root = etree.Element('library-list-svr4', version='1.0')
+        # set main-lm here since '-' can't be used as a kwarg
+        root.attrib['main-lm'] = '0xe4f8f8'
+        # add 2 libraries
+        library = etree.Element('library', name='/lib/ld-linux.so.2', lm='0xe4f51c', l_addr='0xe2d000', l_ld='0xe4eefc')
+        root.append(library)
+        library = etree.Element('library', name='/lib/libc.so.6', lm='0xe4fbe8', l_addr='0x154000', l_ld='0x152350')
+        # generate xml
+        xml = etree.tostring(root, xml_declaration=True, encoding='UTF-8')
+        return xml
+
+
 # commands
     def gen_query_get(self, packet_data):
         if re.match(b'Supported', packet_data):
@@ -188,12 +202,8 @@ class LibVMIStub(GDBStub):
         if m:
             offset = int(m.group('offset'), 16)
             length = int(m.group('length'), 16)
-            xml = ""
-            chunk = xml[offset:offset + length]
-            msg = b'm%s' % chunk
-            if len(chunk) < length or offset+length >= len(xml):
-                # last chunk
-                msg = b'l%s' % chunk
+            xml = self.get_loaded_libraries_xml()
+            msg = self.chunkize(xml, offset, length)
             self.send_packet(GDBPacket(msg))
             return True
         return False
