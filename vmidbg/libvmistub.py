@@ -57,7 +57,8 @@ class LibVMIStub(GDBStub):
             b'QStartNoAckMode': True,
             b'no-resumed': False,
             b'xmlRegisters': False,
-            b'qXfer:memory-map:read': True
+            b'qXfer:memory-map:read': True,
+            b'qXfer:libraries-svr4:read': True
         }
         # [addr] -> [saved_opcode]
         self.addr_to_op = {}
@@ -180,7 +181,15 @@ class LibVMIStub(GDBStub):
             offset = int(m.group('offset'), 16)
             length = int(m.group('length'), 16)
             xml = self.get_memory_map_xml()
-            chunk = xml[offset:offset+length]
+            msg = self.chunkize(xml, offset, length)
+            self.send_packet(GDBPacket(msg))
+            return True
+        m = re.match(b'Xfer:libraries-svr4:read:(?P<annex>.*):(?P<offset>.*),(?P<length>.*)', packet_data)
+        if m:
+            offset = int(m.group('offset'), 16)
+            length = int(m.group('length'), 16)
+            xml = ""
+            chunk = xml[offset:offset + length]
             msg = b'm%s' % chunk
             if len(chunk) < length or offset+length >= len(xml):
                 # last chunk
@@ -617,3 +626,11 @@ class LibVMIStub(GDBStub):
         bytes_written = self.vmi.write(self.ctx.get_access_context(addr), buffer)
         if bytes_written < len(buffer):
             raise LibvmiError
+
+    def chunkize(self, content, offset, length):
+        chunk = content[offset:offset + length]
+        msg = b'm%s' % chunk
+        if len(chunk) < length or offset + length >= len(content):
+            # last chunk
+            msg = b'l%s' % chunk
+        return msg
