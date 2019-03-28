@@ -50,9 +50,15 @@ class RawDebugContext(AbstractDebugContext):
         # get current CR3
         return self.vmi.get_vcpu_reg(X86Reg.CR3.value, 0)
 
+    def dtb_to_desc(self, dtb):
+        pass
+
     def get_access_context(self, address):
         return AccessContext(TranslateMechanism.PROCESS_DTB,
                              addr=address, dtb=self.get_dtb())
+
+    def get_current_running_thread(self):
+        raise RuntimeError('Not implemented')
 
     def get_thread(self, tid=None):
         if not tid:
