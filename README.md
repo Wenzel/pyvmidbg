@@ -14,12 +14,11 @@
 - [Requirements](#requirements)
 - [Install](#install)
 - [Usage](#usage)
-    - [Server](#server)
-    - [GDB Frontends](#gdb-frontends)
- - [References](#references)
- - [Maintainers](#maintainers)
- - [Contributing](#contributing)
- - [License](#license)
+- [Demo](#demo)
+- [References](#references)
+- [Maintainers](#maintainers)
+- [Contributing](#contributing)
+- [License](#license)
 
 ## Overview
 
@@ -95,7 +94,7 @@ vmidbg <port> <vm> [<process>]
 4. set breakpoints on `ntdll!NtOpenFile` and `ntkrnlpa!NtOpenFile`
 5. avoid breakpoints from the rest of the system, only hit if `cmd.exe` is executing
 
-[pyvmidbg-demo](https://github.com/Wenzel/wenzel.github.io/raw/master/public/images/r2vmi_demo.gif)
+![pyvmidbg](https://github.com/Wenzel/wenzel.github.io/blob/master/public/images/pyvmidbg-demo.gif)
 
 ## References
 
