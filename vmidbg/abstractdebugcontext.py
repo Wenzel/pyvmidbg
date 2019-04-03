@@ -21,10 +21,6 @@ class AbstractDebugContext(ABC):
         pass
 
     @abstractmethod
-    def dtb_to_desc(self, dtb):
-        pass
-
-    @abstractmethod
     def get_access_context(self, address):
         pass
 
