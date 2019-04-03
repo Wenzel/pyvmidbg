@@ -31,6 +31,7 @@ class BreakpointManager:
         num_vcpus = self.vmi.get_num_vcpus()
         self.ss_event_recoil = SingleStepEvent(range(num_vcpus), self.cb_on_sstep_recoil, enable=False)
         self.vmi.register_event(self.ss_event_recoil)
+        self.listen_thread = None
         self.stop_listen = threading.Event()
         self.addr_to_opcode = {}
         self.handlers = {}
@@ -113,10 +114,15 @@ class BreakpointManager:
         return EventResponse.TOGGLE_SINGLESTEP
 
     def listen(self, block=True):
-        listen_thread = threading.Thread(target=self.listen_func)
-        listen_thread.start()
+        self.listen_thread = threading.Thread(target=self.listen_func)
+        self.listen_thread.start()
         if block:
-            listen_thread.join()
+            self.listen_thread.join()
+
+    def stop_listening(self):
+        self.stop_listen.set()
+        if self.listen_thread:
+            self.listen_thread.join()
 
     def listen_func(self):
         while not self.stop_listen.is_set():

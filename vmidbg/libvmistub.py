@@ -417,7 +417,7 @@ class LibVMIStub(GDBStub):
 
     def breakin(self, packet_data):
         # stop event thread
-        self.bp.stop_listen.set()
+        self.bp.stop_listening()
         self.ctx.attach()
         msg = b'S%.2x' % GDBSignal.TRAP.value
         self.send_packet(GDBPacket(msg))
