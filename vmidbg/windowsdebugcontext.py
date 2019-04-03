@@ -1,14 +1,13 @@
 import logging
 import json
 import re
-import struct
 from enum import Enum
 
 from libvmi import AccessContext, TranslateMechanism, Registers, X86Reg, VMIWinVer
-from libvmi.event import RegEvent, RegAccess
 
 from vmidbg.vmistruct import VMIStruct
 from vmidbg.abstractdebugcontext import AbstractDebugContext
+from vmidbg.gdbstub import GDBPacket, GDBSignal
 
 
 class ThreadState(Enum):
@@ -207,3 +206,28 @@ class WindowsDebugContext(AbstractDebugContext):
             desc = WindowsTaskDescriptor(idle_desc_addr + self.vmi.get_offset('win_tasks'), self.vmi,
                                          self.rekall)
             yield desc
+
+    def cb_on_swbreak(self, vmi, event):
+        cb_data = event.data
+        # check if it's our targeted process
+        dtb = event.cffi_event.x86_regs.cr3
+        if dtb != self.get_dtb():
+            desc = self.dtb_to_desc(dtb)
+            self.log.debug('wrong process: %s', desc.name)
+            # need to singlestep
+            return True
+        else:
+            self.log.debug('hit !')
+            # pause
+            self.vmi.pause_vm()
+            cb_data['stop_listen'].set()
+            thread = self.get_current_running_thread()
+            if not thread:
+                tid = -1
+            else:
+                tid = thread.id
+            # report swbreak stop to client
+            cb_data['stub'].send_packet_noack(GDBPacket(b'T%.2xswbreak:;thread:%x;' %
+                                              (GDBSignal.TRAP.value, tid)))
+            # don't singlestep
+            return False

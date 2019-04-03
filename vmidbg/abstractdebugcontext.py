@@ -21,15 +21,7 @@ class AbstractDebugContext(ABC):
         pass
 
     @abstractmethod
-    def dtb_to_desc(self, dtb):
-        pass
-
-    @abstractmethod
     def get_access_context(self, address):
-        pass
-
-    @abstractmethod
-    def get_current_running_thread(self):
         pass
 
     @abstractmethod
@@ -38,4 +30,8 @@ class AbstractDebugContext(ABC):
 
     @abstractmethod
     def list_threads(self):
+        pass
+
+    @abstractmethod
+    def cb_on_swbreak(self, vmi, event):
         pass

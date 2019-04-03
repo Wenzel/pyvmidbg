@@ -5,6 +5,7 @@ from libvmi import AccessContext, TranslateMechanism, X86Reg
 from libvmi.event import RegEvent, RegAccess
 
 from vmidbg.abstractdebugcontext import AbstractDebugContext
+from vmidbg.gdbstub import GDBPacket, GDBSignal
 
 
 class LinuxThread:
@@ -128,3 +129,28 @@ class LinuxDebugContext(AbstractDebugContext):
             desc_addr = desc.next_desc
             if desc_addr == head_desc:
                 break
+
+    def cb_on_swbreak(self, vmi, event):
+        cb_data = event.data
+        # check if it's our targeted process
+        dtb = event.cffi_event.x86_regs.cr3
+        if dtb != self.get_dtb():
+            desc = self.dtb_to_desc(dtb)
+            self.log.debug('wrong process: %s', desc.name)
+            # need to singlestep
+            return True
+        else:
+            self.log.debug('hit !')
+            # pause
+            self.vmi.pause_vm()
+            cb_data['stop_listen'].set()
+            thread = self.get_current_running_thread()
+            if not thread:
+                tid = -1
+            else:
+                tid = thread.id
+            # report swbreak stop to client
+            cb_data['stub'].send_packet_noack(GDBPacket(b'T%.2xswbreak:;thread:%x;' %
+                                              (GDBSignal.TRAP.value, tid)))
+            # don't singlestep
+            return False

@@ -3,6 +3,7 @@ import logging
 from libvmi import LibvmiError, X86Reg, AccessContext, TranslateMechanism
 
 from vmidbg.abstractdebugcontext import AbstractDebugContext
+from vmidbg.gdbstub import GDBPacket, GDBSignal
 
 
 class RawThread:
@@ -50,15 +51,9 @@ class RawDebugContext(AbstractDebugContext):
         # get current CR3
         return self.vmi.get_vcpu_reg(X86Reg.CR3.value, 0)
 
-    def dtb_to_desc(self, dtb):
-        pass
-
     def get_access_context(self, address):
         return AccessContext(TranslateMechanism.PROCESS_DTB,
                              addr=address, dtb=self.get_dtb())
-
-    def get_current_running_thread(self):
-        raise RuntimeError('Not implemented')
 
     def get_thread(self, tid=None):
         if not tid:
@@ -79,5 +74,10 @@ class RawDebugContext(AbstractDebugContext):
     def list_threads(self):
         return self.threads
 
-    def get_current_thread(self):
-        return self.threads[self.cur_tid_idx]
+    def cb_on_swbreak(self, vmi, event):
+        cb_data = event.data
+        self.vmi.pause_vm()
+        cb_data['stop_listen'].set()
+        # report break to the stub
+        cb_data['stub'].send_packet_noack(GDBPacket(b'T%.2xswbreak:;' % GDBSignal.TRAP.value))
+        return False
