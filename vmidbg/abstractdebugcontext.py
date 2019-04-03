@@ -39,3 +39,7 @@ class AbstractDebugContext(ABC):
     @abstractmethod
     def list_threads(self):
         pass
+
+    @abstractmethod
+    def cb_on_swbreak(self, vmi, event):
+        pass

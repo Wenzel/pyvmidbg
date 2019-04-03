@@ -1,8 +1,10 @@
 import logging
 
 from libvmi import LibvmiError, X86Reg, AccessContext, TranslateMechanism
+from libvmi.event import EventResponse
 
 from vmidbg.abstractdebugcontext import AbstractDebugContext
+from vmidbg.gdbstub import GDBPacket, GDBSignal
 
 
 class RawThread:
@@ -81,3 +83,11 @@ class RawDebugContext(AbstractDebugContext):
 
     def get_current_thread(self):
         return self.threads[self.cur_tid_idx]
+
+    def cb_on_swbreak(self, vmi, event):
+        cb_data = event.data
+        self.vmi.pause_vm()
+        cb_data['stop_listen'].set()
+        # report break to the stub
+        cb_data['stub'].send_packet_noack(GDBPacket(b'T%.2xswbreak:;' % GDBSignal.TRAP.value))
+        return False
