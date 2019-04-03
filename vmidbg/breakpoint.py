@@ -30,6 +30,7 @@ class BreakpointManager:
         # enabled via EventResponse.TOGGLE_SINGLESTEP
         num_vcpus = self.vmi.get_num_vcpus()
         self.ss_event_recoil = SingleStepEvent(range(num_vcpus), self.cb_on_sstep_recoil, enable=False)
+        self.vmi.register_event(self.ss_event_recoil)
         self.stop_listen = threading.Event()
         self.addr_to_opcode = {}
         self.handlers = {}
@@ -144,4 +145,11 @@ class BreakpointManager:
             self.log.error('breakpoint handler not found !')
         else:
             event.data = cb_data
-            cont = callback(vmi, event)
+            need_sstep = callback(vmi, event)
+            if need_sstep:
+                # store current address to restore breakpoint in cb_sstep_recoil
+                self.last_addr_wrong_swbreak = addr
+                # restore original opcode
+                self.toggle_bp(addr, False)
+                # prepare to singlestep
+                return EventResponse.TOGGLE_SINGLESTEP
