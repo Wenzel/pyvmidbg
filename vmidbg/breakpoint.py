@@ -6,12 +6,6 @@ from libvmi.event import EventResponse, IntEvent, SingleStepEvent
 
 SW_BREAKPOINT = b'\xcc'
 
-# TODO
-# insert_xpoint
-# remove_xpoint
-# listen thread sync/async
-# multiple bp at same address
-
 
 class BreakpointError(Exception):
     pass
