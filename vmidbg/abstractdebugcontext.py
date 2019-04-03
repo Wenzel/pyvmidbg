@@ -25,10 +25,6 @@ class AbstractDebugContext(ABC):
         pass
 
     @abstractmethod
-    def get_current_running_thread(self):
-        pass
-
-    @abstractmethod
     def get_thread(self, tid=None):
         pass
 

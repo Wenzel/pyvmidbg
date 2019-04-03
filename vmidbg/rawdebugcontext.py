@@ -55,9 +55,6 @@ class RawDebugContext(AbstractDebugContext):
         return AccessContext(TranslateMechanism.PROCESS_DTB,
                              addr=address, dtb=self.get_dtb())
 
-    def get_current_running_thread(self):
-        raise RuntimeError('Not implemented')
-
     def get_thread(self, tid=None):
         if not tid:
             tid = self.cur_tid
