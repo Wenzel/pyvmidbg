@@ -1,11 +1,9 @@
 import logging
 import json
 import re
-import struct
 from enum import Enum
 
 from libvmi import AccessContext, TranslateMechanism, Registers, X86Reg, VMIWinVer
-from libvmi.event import RegEvent, RegAccess
 
 from vmidbg.vmistruct import VMIStruct
 from vmidbg.abstractdebugcontext import AbstractDebugContext

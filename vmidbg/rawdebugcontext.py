@@ -1,7 +1,6 @@
 import logging
 
 from libvmi import LibvmiError, X86Reg, AccessContext, TranslateMechanism
-from libvmi.event import EventResponse
 
 from vmidbg.abstractdebugcontext import AbstractDebugContext
 from vmidbg.gdbstub import GDBPacket, GDBSignal
