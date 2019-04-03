@@ -74,9 +74,6 @@ class RawDebugContext(AbstractDebugContext):
     def list_threads(self):
         return self.threads
 
-    def get_current_thread(self):
-        return self.threads[self.cur_tid_idx]
-
     def cb_on_swbreak(self, vmi, event):
         cb_data = event.data
         self.vmi.pause_vm()
