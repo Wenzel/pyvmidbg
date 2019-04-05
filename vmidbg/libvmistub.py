@@ -355,7 +355,7 @@ class LibVMIStub(GDBStub):
             addr = int(m.group('addr'), 16)
             return False
 
-        self.action_singlestep()
+        self.bp.singlestep_once()
 
         msg = b'S%.2x' % GDBSignal.TRAP.value
         self.send_packet(GDBPacket(msg))
@@ -442,7 +442,7 @@ class LibVMIStub(GDBStub):
             # we don't support threads
             action = m.group('action')
             if action == b's':
-                self.action_singlestep()
+                self.bp.singlestep_once()
                 self.send_packet_noack(GDBPacket(b'T%.2x' % GDBSignal.TRAP.value))
                 return True
             if action == b'c':
@@ -459,33 +459,6 @@ class LibVMIStub(GDBStub):
         return False
 
 # helpers
-    def action_singlestep(self):
-        pass
-        # cb_data = {
-        #     'interrupted': False
-        # }
-        #
-        # def cb_on_sstep(vmi, event):
-        #     self.log.debug('singlestepping')
-        #     vmi.pause_vm()
-        #     cb_data['interrupted'] = True
-        # # unregister sstep_recoil
-        # self.vmi.clear_event(self.ss_event_recoil)
-        #
-        # num_vcpus = self.vmi.get_num_vcpus()
-        # #ss_event = SingleStepEvent(range(num_vcpus), cb_on_sstep)
-        # self.vmi.register_event(ss_event)
-        #
-        # self.vmi.resume_vm()
-        # while not cb_data['interrupted']:
-        #     self.vmi.listen(1000)
-        #
-        # self.vmi.listen(0)
-        # self.vmi.clear_event(ss_event)
-        #
-        # # reregister sstep_recoil
-        # self.vmi.register_event(self.ss_event_recoil)
-
     def action_continue(self):
         self.vmi.resume_vm()
         # start listening on VMI events, asynchronously
