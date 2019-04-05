@@ -23,8 +23,8 @@ class BreakpointManager:
         # single step event to handle wrong hits by sw breakpoints
         # enabled via EventResponse.TOGGLE_SINGLESTEP
         num_vcpus = self.vmi.get_num_vcpus()
-        self.ss_event_recoil = SingleStepEvent(range(num_vcpus), self.cb_on_sstep_recoil, enable=False)
-        self.vmi.register_event(self.ss_event_recoil)
+        self.sstep_recoil = SingleStepEvent(range(num_vcpus), self.cb_on_sstep_recoil, enable=False)
+        self.vmi.register_event(self.sstep_recoil)
         self.listen_thread = None
         self.stop_listen = threading.Event()
         self.addr_to_opcode = {}
@@ -77,6 +77,9 @@ class BreakpointManager:
             raise LibvmiError
 
     def singlestep_once(self):
+        # unregister sstep_recoil
+        self.vmi.clear_event(self.sstep_recoil)
+
         stop_event = threading.Event()
 
         def cb_on_sstep(vmi, event):
@@ -98,6 +101,9 @@ class BreakpointManager:
         # clear queue
         self.vmi.listen(0)
         self.vmi.clear_event(ss_event)
+
+        # reregister sstep_recoil
+        self.vmi.register_event(self.sstep_recoil)
 
     def cb_on_sstep_recoil(self, vmi, event):
         self.log.debug('recoil')
