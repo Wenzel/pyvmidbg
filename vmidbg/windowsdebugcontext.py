@@ -126,20 +126,55 @@ class WindowsDebugContext(AbstractDebugContext):
         # 2 - find our target name in process list
         # process name might include regex chars
         pattern = re.escape(self.target_name)
-        found = [desc for desc in self.list_processes() if re.match(pattern, desc.name)]
+        found = [desc for desc in self.list_processes() if re.match(pattern, desc.name, re.IGNORECASE)]
         if not found:
-            self.log.debug('%s not found in process list:', self.target_name)
-            for desc in self.list_processes():
-                self.log.debug(desc)
-            raise RuntimeError('Could not find process')
-        if len(found) > 1:
-            self.log.warning('Found %s processes matching "%s", picking the first match ([%s])',
-                             len(found), self.target_name, found[0].pid)
-        self.target_desc = found[0]
-        self.log.info('Process: {}'.format(self.target_desc))
-        # 4 - enumerate threads
-        for thread in self.list_threads():
-            self.log.info('Thread: {}'.format(thread))
+            self.log.debug('%s not found in process list', self.target_name)
+            self.attach_new_process()
+        else:
+            if len(found) > 1:
+                self.log.warning('Found %s processes matching "%s", picking the first match ([%s])',
+                                 len(found), self.target_name, found[0].pid)
+            self.target_desc = found[0]
+            self.log.info('Process: {}'.format(self.target_desc))
+            # 4 - enumerate threads
+            for thread in self.list_threads():
+                self.log.info('Thread: {}'.format(thread))
+
+    def attach_new_process(self):
+        self.log.info('Waiting for %s process to start...', self.target_name)
+        # 1 - get KiThreadStartup addr
+        thread_startup_addr = self.vmi.translate_ksym2v('KiThreadStartup')
+
+        def handle_thread_start(vmi, event):
+            self.log.info('KiThreadStartup')
+            stop_listen = event.data
+            # find current process
+            dtb = event.cffi_event.x86_regs.cr3
+            desc = self.dtb_to_desc(dtb)
+            pattern = re.escape(self.target_name)
+            if not re.match(pattern, desc.name, re.IGNORECASE):
+                self.log.info('wrong process: %s', desc.name)
+                # need to singlestep
+                return True
+            else:
+                self.log.info('attaching to %s', desc.name)
+                stop_listen.set()
+                # set target desc
+                self.target_desc = desc
+                self.vmi.pause_vm()
+                # don't singlestep
+                return False
+
+        stop_listen = self.bpm.stop_listen
+        stop_listen.clear()
+
+        # 2 - set a breakpoint
+        self.bpm.add_bp(thread_startup_addr, 1, handle_thread_start, stop_listen)
+        # 3 - wait for hit
+        self.vmi.resume_vm()
+        self.bpm.listen(block=True)
+        # 4 - remove our breakpoint
+        self.bpm.del_bp(thread_startup_addr)
 
     def detach(self):
         self.vmi.resume_vm()
@@ -157,8 +192,13 @@ class WindowsDebugContext(AbstractDebugContext):
         return desc
 
     def get_access_context(self, address):
-        return AccessContext(TranslateMechanism.PROCESS_PID,
-                             addr=address, pid=self.target_desc.pid)
+        if self.target_desc is None:
+            # PID 0 is kernel
+            return AccessContext(TranslateMechanism.PROCESS_PID,
+                                 addr=address, pid=0)
+        else:
+            return AccessContext(TranslateMechanism.PROCESS_PID,
+                                 addr=address, pid=self.target_desc.pid)
 
     def get_current_running_thread(self):
         # TODO use KPCR
