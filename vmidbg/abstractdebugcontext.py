@@ -1,10 +1,14 @@
 from abc import ABC, abstractmethod
 
+from vmidbg.breakpoint import BreakpointManager
+
 
 class AbstractDebugContext(ABC):
 
     def __init__(self, vmi):
         self.vmi = vmi
+        # not the best way, but works for now
+        self.bpm = BreakpointManager(self.vmi, self)
         # default thread: all threads
         self.cur_tid = -1
 
