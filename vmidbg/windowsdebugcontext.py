@@ -8,6 +8,7 @@ from libvmi import AccessContext, TranslateMechanism, Registers, X86Reg, VMIWinV
 from vmidbg.vmistruct import VMIStruct
 from vmidbg.abstractdebugcontext import AbstractDebugContext
 from vmidbg.gdbstub import GDBPacket, GDBSignal
+from vmidbg.breakpoint import BreakpointError
 
 
 class ThreadState(Enum):
@@ -144,6 +145,7 @@ class WindowsDebugContext(AbstractDebugContext):
         self.log.info('Waiting for %s process to start...', self.target_name)
         # 1 - get KiThreadStartup addr
         thread_startup_addr = self.vmi.translate_ksym2v('KiThreadStartup')
+        self.log.debug('KiThreadStartup: %s', hex(thread_startup_addr))
 
         def handle_thread_start(vmi, event):
             self.log.info('KiThreadStartup')
@@ -159,7 +161,7 @@ class WindowsDebugContext(AbstractDebugContext):
             else:
                 self.log.info('attaching to %s', desc.name)
                 stop_listen.set()
-                # set target desc
+                # save target desc
                 self.target_desc = desc
                 self.vmi.pause_vm()
                 # don't singlestep
@@ -175,6 +177,52 @@ class WindowsDebugContext(AbstractDebugContext):
         self.bpm.listen(block=True)
         # 4 - remove our breakpoint
         self.bpm.del_bp(thread_startup_addr)
+        # 5 - get RtlUserThreadStart address
+        thread_desc = self.get_current_running_thread()
+        userthreadstart_addr = thread_desc.start_addr
+        self.log.debug('RtlUserThreadStart: %s', hex(userthreadstart_addr))
+
+        def handle_user_thread_start(vmi, event):
+            self.log.info('RtlUserThreadStart')
+            # check if we still are the targeted process
+            # CR3 -> EPROCESS
+            dtb = event.cffi_event.x86_regs.cr3
+            desc = self.dtb_to_desc(dtb)
+            pattern = re.escape(self.target_name)
+            if not re.match(pattern, desc.name, re.IGNORECASE):
+                self.log.info('wrong process: %s', desc.name)
+                # need to singlestep
+                return True
+            else:
+                self.log.info('stopping')
+                stop_listen.set()
+                self.vmi.pause_vm()
+                # don't singlestep
+                return False
+
+        stop_listen = self.bpm.stop_listen
+        stop_listen.clear()
+
+        try:
+            # 6 - set breakpoint
+            self.bpm.add_bp(userthreadstart_addr, 1, handle_user_thread_start, stop_listen)
+        except BreakpointError:
+            # pagefault, singlestep
+            # get rip
+            regs = thread_desc.read_registers()
+
+            while regs[X86Reg.RIP] != userthreadstart_addr:
+                self.bpm.singlestep_once()
+                regs = thread_desc.read_registers()
+                self.log.debug('singlestepping: %s', hex(regs[X86Reg.RIP]))
+            # at RtlUserThreadStart
+        else:
+            # 7 - resume and listen
+            self.vmi.resume_vm()
+            self.bpm.listen(block=True)
+            # 8 - remove our breakpoint
+            self.bpm.del_bp(userthreadstart_addr)
+
 
     def detach(self):
         self.vmi.resume_vm()
