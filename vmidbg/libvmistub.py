@@ -389,7 +389,7 @@ class LibVMIStub(GDBStub):
         kind = int(m.group('kind'), 16)
         if btype == 0:
             # software breakpoint
-            self.ctx.bpm.del_bp(addr)
+            self.ctx.bpm.del_swbp(addr)
             self.send_packet(GDBPacket(b'OK'))
             return True
         return False
@@ -409,7 +409,7 @@ class LibVMIStub(GDBStub):
                 'stub': self,
                 'stop_listen': self.ctx.bpm.stop_listen,
             }
-            self.ctx.bpm.add_bp(addr, kind, self.ctx.cb_on_swbreak, cb_data)
+            self.ctx.bpm.add_swbp(addr, kind, self.ctx.cb_on_swbreak, cb_data)
             self.send_packet(GDBPacket(b'OK'))
             return True
         return False
