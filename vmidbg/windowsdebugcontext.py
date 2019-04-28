@@ -171,12 +171,12 @@ class WindowsDebugContext(AbstractDebugContext):
         stop_listen.clear()
 
         # 2 - set a breakpoint
-        self.bpm.add_bp(thread_startup_addr, 1, handle_thread_start, stop_listen)
+        self.bpm.add_swbp(thread_startup_addr, 1, handle_thread_start, stop_listen)
         # 3 - wait for hit
         self.vmi.resume_vm()
         self.bpm.listen(block=True)
         # 4 - remove our breakpoint
-        self.bpm.del_bp(thread_startup_addr)
+        self.bpm.del_swbp(thread_startup_addr)
         # 5 - get RtlUserThreadStart address
         thread_desc = self.get_current_running_thread()
         userthreadstart_addr = thread_desc.start_addr
@@ -205,16 +205,18 @@ class WindowsDebugContext(AbstractDebugContext):
 
         try:
             # 6 - set breakpoint
-            self.bpm.add_bp(userthreadstart_addr, 1, handle_user_thread_start, stop_listen)
+            self.bpm.add_swbp(userthreadstart_addr, 1, handle_user_thread_start, stop_listen)
         except BreakpointError:
             # pagefault, singlestep
             # get rip
             regs = thread_desc.read_registers()
+            c = 1
 
             while regs[X86Reg.RIP] != userthreadstart_addr:
                 self.bpm.singlestep_once()
                 regs = thread_desc.read_registers()
-                self.log.debug('singlestepping: %s', hex(regs[X86Reg.RIP]))
+                self.log.debug('[%d] singlestepping: %s', c, hex(regs[X86Reg.RIP]))
+                c += 1
             # at RtlUserThreadStart
         else:
             # 7 - resume and listen
