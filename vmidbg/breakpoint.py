@@ -1,5 +1,6 @@
 import logging
 import threading
+import re
 
 from libvmi import LibvmiError, X86Reg
 from libvmi.event import EventResponse, IntEvent, SingleStepEvent, DebugEvent, RegEvent, RegAccess
@@ -40,7 +41,7 @@ class BreakpointManager:
         for addr in self.swbp_addr_to_opcode.keys():
             self.toggle_swbp(addr, False)
 
-    def add_swbp(self, addr, kind, callback, cb_data):
+    def add_swbp(self, addr, kind, callback, cb_data=None):
         # 1 - read opcode
         try:
             buffer, bytes_read = self.vmi.read(self.ctx.get_access_context(addr), kind)
@@ -146,7 +147,6 @@ class BreakpointManager:
 
     def listen_func(self):
         while not self.stop_listen.is_set():
-            self.log.debug('DR7: %s', hex(self.vmi.get_vcpu_reg(X86Reg.DR7.value, 0)))
             self.vmi.listen(1000)
 
     def cb_on_int3(self, vmi, event):
@@ -234,3 +234,29 @@ class BreakpointManager:
         dr7_value = self.vmi.get_vcpu_reg(X86Reg.DR7.value, 0)
         new_value = set_bit(dr7_value, 1, enabled)
         self.vmi.set_vcpureg(new_value, X86Reg.DR7.value, 0)
+
+    def continue_until(self, addr, debug_context):
+        def handle_breakpoint(vmi, event):
+            # find current process
+            dtb = event.cffi_event.x86_regs.cr3
+            desc = debug_context.dtb_to_desc(dtb)
+            pattern = re.escape(debug_context.target_name)
+            if not re.match(pattern, desc.name, re.IGNORECASE):
+                self.log.info('wrong process: %s', desc.name)
+                # need to singlestep
+                return True
+            else:
+                self.stop_listen.set()
+                self.vmi.pause_vm()
+                # don't singlestep
+                return False
+
+        self.stop_listen.clear()
+
+        # 2 - set a breakpoint
+        self.add_swbp(addr, 1, handle_breakpoint)
+        # 3 - wait for hit
+        self.vmi.resume_vm()
+        self.listen(block=True)
+        # 4 - remove our breakpoint
+        self.del_swbp(addr)
