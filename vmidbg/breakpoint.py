@@ -42,6 +42,10 @@ class BreakpointManager:
             self.toggle_swbp(addr, False)
 
     def add_swbp(self, addr, kind, callback, cb_data=None):
+        if not self.ensure_pagedin(addr):
+            # virtual address is not part of the process's VAD
+            self.log.warning('Fail to add software breakpoint: addr not in VAD')
+            return False
         # 1 - read opcode
         try:
             buffer, bytes_read = self.vmi.read(self.ctx.get_access_context(addr), kind)
@@ -241,12 +245,13 @@ class BreakpointManager:
         new_value = set_bit(dr7_value, 1, enabled)
         self.vmi.set_vcpureg(new_value, X86Reg.DR7.value, 0)
 
-    def continue_until(self, addr, debug_context, hwbreakpoint=False):
+    def continue_until(self, addr, hwbreakpoint=False):
+        # 1 - define handler
         def handle_breakpoint(vmi, event):
             # find current process
             dtb = event.cffi_event.x86_regs.cr3
-            desc = debug_context.dtb_to_desc(dtb)
-            pattern = re.escape(debug_context.target_name)
+            desc = self.ctx.dtb_to_desc(dtb)
+            pattern = re.escape(self.ctx.target_name)
             if not re.match(pattern, desc.name, re.IGNORECASE):
                 self.log.info('wrong process: %s', desc.name)
                 # need to singlestep
@@ -257,8 +262,6 @@ class BreakpointManager:
                 # don't singlestep
                 return False
 
-        self.stop_listen.clear()
-
         # 2 - set a breakpoint
         if hwbreakpoint:
             self.add_hwbp(addr, handle_breakpoint)
@@ -266,9 +269,72 @@ class BreakpointManager:
             self.add_swbp(addr, 1, handle_breakpoint)
         # 3 - wait for hit
         self.vmi.resume_vm()
+        self.stop_listen.clear()
         self.listen(block=True)
         # 4 - remove our breakpoint
         if hwbreakpoint:
             self.del_hwbp(addr)
         else:
             self.del_swbp(addr)
+
+    # pagefault injection
+    def ensure_pagedin(self, addr):
+        """
+        Ensure that a given virtual address has a frame in physical memory
+        """
+        dtb = self.ctx.get_dtb()
+        try:
+            self.vmi.pagetable_lookup(dtb, addr)
+        except LibvmiError:
+            # paged out !
+            logging.warning('%s is paged out !', hex(addr))
+            self.inject_pagefault(addr)
+            return True
+        else:
+            return True
+        return False
+
+    def inject_pagefault(self, addr):
+        """
+        inject a shellcode that will trigger a memory access in the guest,
+        and let the guest recover from the pagefault to remap the missing frame in
+        physical memory
+        :param addr:
+        :return:
+        """
+        # prepare shellcode
+        # mov eax, [eax]
+        # 0x8B 0x00
+        shellcode = b'\x8B\x00'
+        # save registers
+        logging.debug('save registers')
+        orig_regs = self.vmi.get_vcpuregs(0)
+        # save original instructions at current rip
+        logging.debug('save original instructions')
+        acc_ctx = self.ctx.get_access_context(orig_regs[X86Reg.RIP])
+        count = len(shellcode)
+        orig_opcodes, *rest = self.vmi.read(acc_ctx, count)
+        # set eax as our faulty address
+        logging.debug('set eax as our faulty address')
+        self.vmi.set_vcpureg(addr, X86Reg.RAX.value, 0)
+        # inject shellcode
+        logging.debug('write shellcode')
+        self.vmi.write(acc_ctx, shellcode)
+        # continue until after shellcode
+        logging.debug('continue after shellcode')
+        after_shellcode_addr = orig_regs[X86Reg.RIP] + len(shellcode)
+        self.continue_until(after_shellcode_addr)
+        # restore registers
+        logging.debug('restore registers')
+        self.vmi.set_vcpuregs(orig_regs, 0)
+        # restore instructions
+        logging.debug('restore original instructions')
+        self.vmi.write(acc_ctx, orig_opcodes)
+        # confirm that our address is pagedin now
+        dtb = self.ctx.get_dtb()
+        try:
+            self.vmi.pagetable_lookup(dtb, addr)
+        except LibvmiError as e:
+            raise RuntimeError('pagefault injection failed !') from e
+        else:
+            logging.info('pagefault injection succeeded !')
