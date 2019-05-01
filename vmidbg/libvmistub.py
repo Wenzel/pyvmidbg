@@ -77,7 +77,6 @@ class LibVMIStub(GDBStub):
                     self.ctx = LinuxDebugContext(self.vmi, self.process)
                 else:
                     raise RuntimeError('unhandled ostype: {}'.format(ostype.value))
-            self.bp = BreakpointManager(self.vmi, self.ctx)
             self.ctx.attach()
             self.attached = True
         except:
@@ -88,7 +87,7 @@ class LibVMIStub(GDBStub):
         try:
             self.ctx.detach()
             self.attached = False
-            self.bp.restore_opcodes()
+            self.ctx.bpm.restore_opcodes()
         except:
             logging.exception('Exception while detaching from debug context')
         finally:
@@ -355,7 +354,7 @@ class LibVMIStub(GDBStub):
             addr = int(m.group('addr'), 16)
             return False
 
-        self.bp.singlestep_once()
+        self.ctx.bpm.singlestep_once()
 
         msg = b'S%.2x' % GDBSignal.TRAP.value
         self.send_packet(GDBPacket(msg))
@@ -390,7 +389,7 @@ class LibVMIStub(GDBStub):
         kind = int(m.group('kind'), 16)
         if btype == 0:
             # software breakpoint
-            self.bp.del_bp(addr)
+            self.ctx.bpm.del_swbp(addr)
             self.send_packet(GDBPacket(b'OK'))
             return True
         return False
@@ -408,16 +407,16 @@ class LibVMIStub(GDBStub):
             # software breakpoint
             cb_data = {
                 'stub': self,
-                'stop_listen': self.bp.stop_listen,
+                'stop_listen': self.ctx.bpm.stop_listen,
             }
-            self.bp.add_bp(addr, kind, self.ctx.cb_on_swbreak, cb_data)
+            self.ctx.bpm.add_swbp(addr, kind, self.ctx.cb_on_swbreak, cb_data)
             self.send_packet(GDBPacket(b'OK'))
             return True
         return False
 
     def breakin(self, packet_data):
         # stop event thread
-        self.bp.stop_listening()
+        self.ctx.bpm.stop_listening()
         self.ctx.attach()
         msg = b'S%.2x' % GDBSignal.TRAP.value
         self.send_packet(GDBPacket(msg))
@@ -442,7 +441,7 @@ class LibVMIStub(GDBStub):
             # we don't support threads
             action = m.group('action')
             if action == b's':
-                self.bp.singlestep_once()
+                self.ctx.bpm.singlestep_once()
                 self.send_packet_noack(GDBPacket(b'T%.2x' % GDBSignal.TRAP.value))
                 return True
             if action == b'c':
@@ -462,7 +461,7 @@ class LibVMIStub(GDBStub):
     def action_continue(self):
         self.vmi.resume_vm()
         # start listening on VMI events, asynchronously
-        self.bp.listen(block=False)
+        self.ctx.bpm.listen(block=False)
 
     def set_supported_features(self, packet_data):
         # split string and get features in a list

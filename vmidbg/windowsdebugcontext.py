@@ -8,6 +8,7 @@ from libvmi import AccessContext, TranslateMechanism, Registers, X86Reg, VMIWinV
 from vmidbg.vmistruct import VMIStruct
 from vmidbg.abstractdebugcontext import AbstractDebugContext
 from vmidbg.gdbstub import GDBPacket, GDBSignal
+from vmidbg.breakpoint import BreakpointError
 
 
 class ThreadState(Enum):
@@ -126,20 +127,49 @@ class WindowsDebugContext(AbstractDebugContext):
         # 2 - find our target name in process list
         # process name might include regex chars
         pattern = re.escape(self.target_name)
-        found = [desc for desc in self.list_processes() if re.match(pattern, desc.name)]
+        found = [desc for desc in self.list_processes() if re.match(pattern, desc.name, re.IGNORECASE)]
         if not found:
-            self.log.debug('%s not found in process list:', self.target_name)
-            for desc in self.list_processes():
-                self.log.debug(desc)
-            raise RuntimeError('Could not find process')
-        if len(found) > 1:
-            self.log.warning('Found %s processes matching "%s", picking the first match ([%s])',
-                             len(found), self.target_name, found[0].pid)
-        self.target_desc = found[0]
-        self.log.info('Process: {}'.format(self.target_desc))
-        # 4 - enumerate threads
-        for thread in self.list_threads():
-            self.log.info('Thread: {}'.format(thread))
+            self.log.debug('%s not found in process list', self.target_name)
+            self.attach_new_process()
+        else:
+            if len(found) > 1:
+                self.log.warning('Found %s processes matching "%s", picking the first match ([%s])',
+                                 len(found), self.target_name, found[0].pid)
+            self.target_desc = found[0]
+            self.log.info('Process: {}'.format(self.target_desc))
+            # 4 - enumerate threads
+            for thread in self.list_threads():
+                self.log.info('Thread: {}'.format(thread))
+
+    def attach_new_process(self):
+        self.log.info('Waiting for %s process to start...', self.target_name)
+        # get KiThreadStartup addr
+        thread_startup_addr = self.vmi.translate_ksym2v('KiThreadStartup')
+        self.log.debug('KiThreadStartup: %s', hex(thread_startup_addr))
+        # continue to KithreadStartup
+        self.bpm.continue_until(thread_startup_addr, self)
+        # set target desc
+        dtb = self.vmi.get_vcpu_reg(X86Reg.CR3.value, 0)
+        self.target_desc = self.dtb_to_desc(dtb)
+        # continue to NtContinue
+        ntcontinue_addr = self.vmi.translate_ksym2v('NtContinue')
+        self.log.info('NtContinue: %s', hex(ntcontinue_addr))
+        self.bpm.continue_until(ntcontinue_addr, self)
+        # get ETHREAD.StartAddress address
+        thread_desc = self.get_current_running_thread()
+        thread_start_addr = thread_desc.start_addr
+        self.log.debug('ETHREAD.StartAddress: %s', hex(thread_start_addr))
+        # continue to ETHREAD.StartAddress
+        self.bpm.continue_until(thread_start_addr, self)
+        if self.vmi.get_winver() == VMIWinVer.OS_WINDOWS_XP:
+            # we are at BaseProcessStartThunk
+            # read entrypoint address from EAX
+            entrypoint_addr = self.vmi.get_vcpu_reg(X86Reg.RAX.value, 0)
+            self.log.debug('Entrypoint: %s', hex(entrypoint_addr))
+            # continue to entrypoint
+            self.bpm.continue_until(entrypoint_addr, self, True)
+        else:
+            raise RuntimeError('Not implemented')
 
     def detach(self):
         self.vmi.resume_vm()
@@ -157,15 +187,20 @@ class WindowsDebugContext(AbstractDebugContext):
         return desc
 
     def get_access_context(self, address):
-        return AccessContext(TranslateMechanism.PROCESS_PID,
-                             addr=address, pid=self.target_desc.pid)
+        if self.target_desc is None:
+            # PID 0 is kernel
+            return AccessContext(TranslateMechanism.PROCESS_PID,
+                                 addr=address, pid=0)
+        else:
+            return AccessContext(TranslateMechanism.PROCESS_PID,
+                                 addr=address, pid=self.target_desc.pid)
 
     def get_current_running_thread(self):
         # TODO use KPCR
         found = [thread for thread in self.list_threads() if thread.State ==
                  ThreadState.RUNNING]
         if not found:
-            self.log.warning('Cannot find current running thread %s', tid)
+            self.log.warning('Cannot find current running thread')
             return None
         if len(found) > 1:
             self.log.warning('Multiple threads running')

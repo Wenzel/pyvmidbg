@@ -1,8 +1,9 @@
 import logging
 import threading
+import re
 
-from libvmi import LibvmiError
-from libvmi.event import EventResponse, IntEvent, SingleStepEvent
+from libvmi import LibvmiError, X86Reg
+from libvmi.event import EventResponse, IntEvent, SingleStepEvent, DebugEvent, RegEvent, RegAccess
 
 SW_BREAKPOINT = b'\xcc'
 
@@ -17,9 +18,12 @@ class BreakpointManager:
         self.log = logging.getLogger(__class__.__name__)
         self.vmi = vmi
         self.ctx = ctx
-        # register Int3 event
+        # register int3 event
         self.int_event = IntEvent(self.cb_on_int3)
         self.vmi.register_event(self.int_event)
+        # register hardware debug event
+        self.debug_event = DebugEvent(self.cb_on_debug)
+        self.vmi.register_event(self.debug_event)
         # single step event to handle wrong hits by sw breakpoints
         # enabled via EventResponse.TOGGLE_SINGLESTEP
         num_vcpus = self.vmi.get_num_vcpus()
@@ -27,19 +31,17 @@ class BreakpointManager:
         self.vmi.register_event(self.sstep_recoil)
         self.listen_thread = None
         self.stop_listen = threading.Event()
-        self.addr_to_opcode = {}
-        self.handlers = {}
-        # store the last addr where a swbreakpoint was hit
-        # but it was not our targeted process
-        # used in cb_on_sstep_recoil to restore the breakpoint after
-        # the recoil
-        self.last_addr_wrong_swbreak = None
+        # handling software breakpoint
+        self.swbp_addr_to_opcode = {}
+        self.swbp_handlers = {}
+        # handling hardware breakpoints
+        self.hwbp_handlers = {}
 
     def restore_opcodes(self):
-        for addr in self.addr_to_opcode.keys():
-            self.toggle_bp(addr, False)
+        for addr in self.swbp_addr_to_opcode.keys():
+            self.toggle_swbp(addr, False)
 
-    def add_bp(self, addr, kind, callback, cb_data):
+    def add_swbp(self, addr, kind, callback, cb_data=None):
         # 1 - read opcode
         try:
             buffer, bytes_read = self.vmi.read(self.ctx.get_access_context(addr), kind)
@@ -49,29 +51,47 @@ class BreakpointManager:
         if bytes_read < kind:
             raise BreakpointError('Unable to read enough bytes')
         # 2 - save opcode
-        self.addr_to_opcode[addr] = buffer
+        self.swbp_addr_to_opcode[addr] = buffer
         # 3 - write breakpoint
         try:
-            self.toggle_bp(addr, True)
+            self.toggle_swbp(addr, True)
         except LibvmiError:
-            self.addr_to_opcode.pop(addr)
+            self.swbp_addr_to_opcode.pop(addr)
             raise BreakpointError('Unable to write breakpoint')
         else:
             # register callback
-            self.handlers[addr] = (callback, cb_data)
+            self.swbp_handlers[addr] = (callback, cb_data)
 
-    def del_bp(self, addr):
+    def del_swbp(self, addr):
         # already removed ?
-        if addr in self.addr_to_opcode:
-            self.toggle_bp(addr, False)
+        if addr in self.swbp_addr_to_opcode:
+            self.toggle_swbp(addr, False)
             # remove callbacks
-            del self.handlers[addr]
+            del self.swbp_handlers[addr]
 
-    def toggle_bp(self, addr, set):
+    def add_hwbp(self, addr, callback, cb_data=None):
+        # set DR0 to RtlUserThreadStart
+        self.vmi.set_vcpureg(addr, X86Reg.DR0.value, 0)
+        # enable breakpoint in DR7
+        self.toggle_dr0(True)
+        # add callback to handlers
+        self.hwbp_handlers[addr] = (callback, cb_data)
+
+    def del_hwbp(self, addr):
+        # disable breakpoint in DR7
+        self.toggle_dr0(False)
+        # clear breakpoint in DR0
+        self.vmi.set_vcpureg(0, X86Reg.DR0.value, 0)
+        try:
+            del self.hwbp_handlers[addr]
+        except KeyError:
+            pass
+
+    def toggle_swbp(self, addr, set):
         if set:
             buffer = SW_BREAKPOINT
         else:
-            buffer = self.addr_to_opcode[addr]
+            buffer = self.swbp_addr_to_opcode[addr]
         bytes_written = self.vmi.write(self.ctx.get_access_context(addr), buffer)
         if bytes_written < len(buffer):
             raise LibvmiError
@@ -107,9 +127,16 @@ class BreakpointManager:
 
     def cb_on_sstep_recoil(self, vmi, event):
         self.log.debug('recoil')
-        # restore swbreak
-        self.toggle_bp(self.last_addr_wrong_swbreak, True)
-        self.last_addr_wrong_swbreak = None
+        cb_data = event.data
+        if cb_data['reason'] == 'swbreak':
+            # restore swbreak
+            addr = cb_data['breakpoint']
+            self.toggle_swbp(addr, True)
+        elif cb_data['reason'] == 'hwbreak':
+            # restore hwbreak
+            self.toggle_dr0(True)
+        else:
+            raise RuntimeError('Unknown recoil reason: %s', cb_data['reason'])
         # done singlestepping
         return EventResponse.TOGGLE_SINGLESTEP
 
@@ -134,7 +161,7 @@ class BreakpointManager:
         # set default reinject behavior
         event.reinject = 0
         # reinject ?
-        if addr not in self.addr_to_opcode:
+        if addr not in self.swbp_addr_to_opcode:
             # not our breakpoint, reinject
             self.log.debug('reinject')
             event.reinject = 1
@@ -146,16 +173,102 @@ class BreakpointManager:
         self.vmi.symcache_flush()
         # call handlers
         try:
-            callback, cb_data = self.handlers[addr]
+            callback, cb_data = self.swbp_handlers[addr]
         except KeyError:
             self.log.error('breakpoint handler not found !')
         else:
             event.data = cb_data
             need_sstep = callback(vmi, event)
             if need_sstep:
-                # store current address to restore breakpoint in cb_sstep_recoil
-                self.last_addr_wrong_swbreak = addr
                 # restore original opcode
-                self.toggle_bp(addr, False)
+                self.toggle_swbp(addr, False)
                 # prepare to singlestep
+                self.sstep_recoil.data = {
+                    'reason': 'swbreak',
+                    'breakpoint': addr,
+                }
                 return EventResponse.TOGGLE_SINGLESTEP
+
+    def cb_on_debug(self, vmi, event):
+        addr = event.cffi_event.x86_regs.rip
+        self.log.info('debug hit %s', hex(addr))
+        # set default reinject behavior
+        event.reinject = 0
+        # reinject ?
+        if addr not in self.hwbp_handlers:
+            # not our breakpoint, reinject
+            self.log.debug('reinject')
+            event.reinject = 1
+            return EventResponse.NONE
+        # invalidate libvmi caches
+        self.vmi.v2pcache_flush()
+        self.vmi.pidcache_flush()
+        self.vmi.rvacache_flush()
+        self.vmi.symcache_flush()
+        # call handlers
+        try:
+            callback, cb_data = self.hwbp_handlers[addr]
+        except KeyError:
+            self.log.error('breakpoint handler not found !')
+        else:
+            event.data = cb_data
+            need_sstep = callback(vmi, event)
+            if need_sstep:
+                # disable breakpoint
+                self.toggle_dr0(False)
+                # clear dr6
+                self.vmi.set_vcpu_reg(0, X86Reg.DR6, 0)
+                # prepare to singlestep
+                self.sstep_recoil.data = {
+                    'reason': 'hwbreak',
+                    'breakpoint': addr,
+                }
+                return EventResponse.TOGGLE_SINGLESTEP
+            # clear dr6
+            self.vmi.set_vcpureg(0, X86Reg.DR6.value, 0)
+
+    def toggle_dr0(self, enabled):
+
+        def set_bit(value, index, enabled):
+            mask = 1 << index
+            if enabled:
+                value |= mask
+            else:
+                value &= ~mask
+            return value
+        # read old DR7 value
+        dr7_value = self.vmi.get_vcpu_reg(X86Reg.DR7.value, 0)
+        new_value = set_bit(dr7_value, 1, enabled)
+        self.vmi.set_vcpureg(new_value, X86Reg.DR7.value, 0)
+
+    def continue_until(self, addr, debug_context, hwbreakpoint=False):
+        def handle_breakpoint(vmi, event):
+            # find current process
+            dtb = event.cffi_event.x86_regs.cr3
+            desc = debug_context.dtb_to_desc(dtb)
+            pattern = re.escape(debug_context.target_name)
+            if not re.match(pattern, desc.name, re.IGNORECASE):
+                self.log.info('wrong process: %s', desc.name)
+                # need to singlestep
+                return True
+            else:
+                self.stop_listen.set()
+                self.vmi.pause_vm()
+                # don't singlestep
+                return False
+
+        self.stop_listen.clear()
+
+        # 2 - set a breakpoint
+        if hwbreakpoint:
+            self.add_hwbp(addr, handle_breakpoint)
+        else:
+            self.add_swbp(addr, 1, handle_breakpoint)
+        # 3 - wait for hit
+        self.vmi.resume_vm()
+        self.listen(block=True)
+        # 4 - remove our breakpoint
+        if hwbreakpoint:
+            self.del_hwbp(addr)
+        else:
+            self.del_swbp(addr)
