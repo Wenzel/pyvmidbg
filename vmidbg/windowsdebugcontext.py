@@ -151,11 +151,25 @@ class WindowsDebugContext(AbstractDebugContext):
         # set target desc
         dtb = self.vmi.get_vcpu_reg(X86Reg.CR3.value, 0)
         self.target_desc = self.dtb_to_desc(dtb)
-        # get RtlUserThreadStart address
+        # continue to NtContinue
+        ntcontinue_addr = self.vmi.translate_ksym2v('NtContinue')
+        self.log.info('NtContinue: %s', hex(ntcontinue_addr))
+        self.bpm.continue_until(ntcontinue_addr, self)
+        # get ETHREAD.StartAddress address
         thread_desc = self.get_current_running_thread()
-        userthreadstart_addr = thread_desc.start_addr
-        self.log.debug('RtlUserThreadStart: %s', hex(userthreadstart_addr))
-        # self.bpm.continue_until(userthreadstart_addr)
+        thread_start_addr = thread_desc.start_addr
+        self.log.debug('ETHREAD.StartAddress: %s', hex(thread_start_addr))
+        # continue to ETHREAD.StartAddress
+        self.bpm.continue_until(thread_start_addr, self)
+        if self.vmi.get_winver() == VMIWinVer.OS_WINDOWS_XP:
+            # we are at BaseProcessStartThunk
+            # read entrypoint address from EAX
+            entrypoint_addr = self.vmi.get_vcpu_reg(X86Reg.RAX.value, 0)
+            self.log.debug('Entrypoint: %s', hex(entrypoint_addr))
+            # continue to entrypoint
+            self.bpm.continue_until(entrypoint_addr, self, True)
+        else:
+            raise RuntimeError('Not implemented')
 
     def detach(self):
         self.vmi.resume_vm()
