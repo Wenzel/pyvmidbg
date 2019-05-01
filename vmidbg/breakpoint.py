@@ -69,17 +69,23 @@ class BreakpointManager:
             # remove callbacks
             del self.swbp_handlers[addr]
 
-    def add_hwbp(self, addr):
+    def add_hwbp(self, addr, callback, cb_data=None):
         # set DR0 to RtlUserThreadStart
         self.vmi.set_vcpureg(addr, X86Reg.DR0.value, 0)
         # enable breakpoint in DR7
         self.toggle_dr0(True)
+        # add callback to handlers
+        self.hwbp_handlers[addr] = (callback, cb_data)
 
     def del_hwbp(self, addr):
         # disable breakpoint in DR7
         self.toggle_dr0(False)
         # clear breakpoint in DR0
         self.vmi.set_vcpureg(0, X86Reg.DR0.value, 0)
+        try:
+            del self.hwbp_handlers[addr]
+        except KeyError:
+            pass
 
     def toggle_swbp(self, addr, set):
         if set:
@@ -219,7 +225,7 @@ class BreakpointManager:
                 }
                 return EventResponse.TOGGLE_SINGLESTEP
             # clear dr6
-            self.vmi.set_vcpu_reg(0, X86Reg.DR6, 0)
+            self.vmi.set_vcpureg(0, X86Reg.DR6.value, 0)
 
     def toggle_dr0(self, enabled):
 
@@ -235,7 +241,7 @@ class BreakpointManager:
         new_value = set_bit(dr7_value, 1, enabled)
         self.vmi.set_vcpureg(new_value, X86Reg.DR7.value, 0)
 
-    def continue_until(self, addr, debug_context):
+    def continue_until(self, addr, debug_context, hwbreakpoint=False):
         def handle_breakpoint(vmi, event):
             # find current process
             dtb = event.cffi_event.x86_regs.cr3
@@ -254,9 +260,15 @@ class BreakpointManager:
         self.stop_listen.clear()
 
         # 2 - set a breakpoint
-        self.add_swbp(addr, 1, handle_breakpoint)
+        if hwbreakpoint:
+            self.add_hwbp(addr, handle_breakpoint)
+        else:
+            self.add_swbp(addr, 1, handle_breakpoint)
         # 3 - wait for hit
         self.vmi.resume_vm()
         self.listen(block=True)
         # 4 - remove our breakpoint
-        self.del_swbp(addr)
+        if hwbreakpoint:
+            self.del_hwbp(addr)
+        else:
+            self.del_swbp(addr)
