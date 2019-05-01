@@ -147,27 +147,27 @@ class WindowsDebugContext(AbstractDebugContext):
         thread_startup_addr = self.vmi.translate_ksym2v('KiThreadStartup')
         self.log.debug('KiThreadStartup: %s', hex(thread_startup_addr))
         # continue to KithreadStartup
-        self.bpm.continue_until(thread_startup_addr, self)
+        self.bpm.continue_until(thread_startup_addr)
         # set target desc
         dtb = self.vmi.get_vcpu_reg(X86Reg.CR3.value, 0)
         self.target_desc = self.dtb_to_desc(dtb)
-        # continue to NtContinue
+        # continue to NtContinue (this limits the chance that ETHREAD.StartAddress is paged out)
         ntcontinue_addr = self.vmi.translate_ksym2v('NtContinue')
-        self.log.info('NtContinue: %s', hex(ntcontinue_addr))
-        self.bpm.continue_until(ntcontinue_addr, self)
+        self.log.debug('NtContinue: %s', hex(ntcontinue_addr))
+        self.bpm.continue_until(ntcontinue_addr)
         # get ETHREAD.StartAddress address
         thread_desc = self.get_current_running_thread()
         thread_start_addr = thread_desc.start_addr
         self.log.debug('ETHREAD.StartAddress: %s', hex(thread_start_addr))
-        # continue to ETHREAD.StartAddress
-        self.bpm.continue_until(thread_start_addr, self)
+        # continue to ETHREAD.StartAddress with hardware breakpoint
+        self.bpm.continue_until(thread_start_addr, True)
         if self.vmi.get_winver() == VMIWinVer.OS_WINDOWS_XP:
             # we are at BaseProcessStartThunk
             # read entrypoint address from EAX
             entrypoint_addr = self.vmi.get_vcpu_reg(X86Reg.RAX.value, 0)
             self.log.debug('Entrypoint: %s', hex(entrypoint_addr))
             # continue to entrypoint
-            self.bpm.continue_until(entrypoint_addr, self, True)
+            self.bpm.continue_until(entrypoint_addr)
         else:
             raise RuntimeError('Not implemented')
 
@@ -175,7 +175,10 @@ class WindowsDebugContext(AbstractDebugContext):
         self.vmi.resume_vm()
 
     def get_dtb(self):
-        return self.target_desc.dtb
+        if not self.target_desc:
+            return self.vmi.get_vcpu_reg(X86Reg.CR3.value, 0)
+        else:
+            return self.target_desc.dtb
 
     def dtb_to_desc(self, dtb):
         found = [desc for desc in self.list_processes() if desc.dtb == dtb]
