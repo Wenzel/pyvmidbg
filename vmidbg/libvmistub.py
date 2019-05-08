@@ -8,7 +8,6 @@ from binascii import hexlify, unhexlify
 from libvmi import Libvmi, INIT_DOMAINNAME, INIT_EVENTS, VMIOS, LibvmiError, X86Reg
 
 from .gdbstub import GDBStub, GDBPacket, GDBCmd, GDBSignal, PACKET_SIZE
-from .breakpoint import BreakpointManager
 from .rawdebugcontext import RawDebugContext
 from .linuxdebugcontext import LinuxDebugContext
 from .windowsdebugcontext import WindowsDebugContext
@@ -264,7 +263,6 @@ class LibVMIStub(GDBStub):
                 regs[r] = value
         # eflags
         value, *rest = next(iter)
-        logging.debug('%s: %x', X86Reg.RFLAGS.name, value)
         regs[X86Reg.RFLAGS] = value
         # TODO segment registers
         try:
@@ -354,6 +352,7 @@ class LibVMIStub(GDBStub):
             addr = int(m.group('addr'), 16)
             return False
 
+        self.ctx.bpm.wait_process_scheduled()
         self.ctx.bpm.singlestep_once()
 
         msg = b'S%.2x' % GDBSignal.TRAP.value
@@ -441,6 +440,7 @@ class LibVMIStub(GDBStub):
             # we don't support threads
             action = m.group('action')
             if action == b's':
+                self.ctx.bpm.wait_process_scheduled()
                 self.ctx.bpm.singlestep_once()
                 self.send_packet_noack(GDBPacket(b'T%.2x' % GDBSignal.TRAP.value))
                 return True

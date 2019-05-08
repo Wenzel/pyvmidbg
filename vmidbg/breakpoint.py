@@ -72,6 +72,8 @@ class BreakpointManager:
             self.toggle_swbp(addr, False)
             # remove callbacks
             del self.swbp_handlers[addr]
+            # remove opcode
+            del self.swbp_addr_to_opcode[addr]
 
     def add_hwbp(self, addr, callback, cb_data=None):
         # set DR0 to RtlUserThreadStart
@@ -156,6 +158,7 @@ class BreakpointManager:
             self.listen_thread.join()
 
     def listen_func(self):
+        self.stop_listen.clear()
         while not self.stop_listen.is_set():
             self.vmi.listen(1000)
 
@@ -338,3 +341,16 @@ class BreakpointManager:
             raise RuntimeError('pagefault injection failed !') from e
         else:
             logging.info('pagefault injection succeeded !')
+
+    def wait_process_scheduled(self):
+        # current thread already scheduled ?
+        thread = self.ctx.get_thread()
+        if thread.is_running():
+            return
+        self.log.info('Waiting for thread %d to be scheduled', hex(thread.id))
+
+        def handle_breakpoint(vmi, event):
+            self.stop_listen.set()
+        # set a breakpoint on thread rip
+        regs = thread.read_registers()
+        self.continue_until(regs[X86Reg.RIP])

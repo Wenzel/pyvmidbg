@@ -8,7 +8,6 @@ from libvmi import AccessContext, TranslateMechanism, Registers, X86Reg, VMIWinV
 from vmidbg.vmistruct import VMIStruct
 from vmidbg.abstractdebugcontext import AbstractDebugContext
 from vmidbg.gdbstub import GDBPacket, GDBSignal
-from vmidbg.breakpoint import BreakpointError
 
 
 class ThreadState(Enum):
@@ -44,7 +43,7 @@ class WindowsThread:
 
     def read_registers(self):
         self.log.debug('%s: read registers (state: %s)', self.id, self.State)
-        if self.State == ThreadState.RUNNING:
+        if self.is_running():
             return self.vmi.get_vcpuregs(0)
         else:
             regs = Registers()
@@ -61,6 +60,9 @@ class WindowsThread:
 
     def is_alive(self):
         return True
+
+    def is_running(self):
+        return self.State == ThreadState.RUNNING
 
     def __str__(self):
         return "[{}] - addr: {}, start_address: {}, state: {}"\
