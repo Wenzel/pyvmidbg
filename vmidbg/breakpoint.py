@@ -66,6 +66,27 @@ class BreakpointManager:
             # register callback
             self.swbp_handlers[addr] = (callback, cb_data)
 
+    def add_swbp_paddr(self, vaddr, paddr, kind, callback, cb_data=None):
+        # 1 - read opcode
+        try:
+            buffer, bytes_read = self.vmi.read_pa(paddr, 1)
+        except LibvmiError:
+            raise BreakpointError('Unable to read opcode')
+
+        if bytes_read < kind:
+            raise BreakpointError('Unable to read enough bytes')
+        # 2 - save opcode
+        self.swbp_addr_to_opcode[vaddr] = buffer
+        # 3 - write breakpoint
+        try:
+            self.toggle_swbp_paddr(paddr, True)
+        except LibvmiError:
+            self.swbp_addr_to_opcode.pop(vaddr)
+            raise BreakpointError('Unable to write breakpoint')
+        else:
+            # register callback
+            self.swbp_handlers[vaddr] = (callback, cb_data)
+
     def del_swbp(self, addr):
         # already removed ?
         if addr in self.swbp_addr_to_opcode:
@@ -99,6 +120,15 @@ class BreakpointManager:
         else:
             buffer = self.swbp_addr_to_opcode[addr]
         bytes_written = self.vmi.write(self.ctx.get_access_context(addr), buffer)
+        if bytes_written < len(buffer):
+            raise LibvmiError
+
+    def toggle_swbp_paddr(self, paddr, set):
+        if set:
+            buffer = SW_BREAKPOINT
+        else:
+            buffer = self.swbp_addr_to_opcode[paddr]
+        bytes_written = self.vmi.write_pa(paddr, buffer)
         if bytes_written < len(buffer):
             raise LibvmiError
 
@@ -248,7 +278,7 @@ class BreakpointManager:
         new_value = set_bit(dr7_value, 1, enabled)
         self.vmi.set_vcpureg(new_value, X86Reg.DR7.value, 0)
 
-    def continue_until(self, addr, hwbreakpoint=False):
+    def continue_until(self, addr, hwbreakpoint=False, paddr=False):
         # 1 - define handler
         def handle_breakpoint(vmi, event):
             # find current process
@@ -269,7 +299,10 @@ class BreakpointManager:
         if hwbreakpoint:
             self.add_hwbp(addr, handle_breakpoint)
         else:
-            self.add_swbp(addr, 1, handle_breakpoint)
+            if paddr:
+                self.add_swbp_paddr(addr, paddr, 1, handle_breakpoint)
+            else:
+                self.add_swbp(addr, 1, handle_breakpoint)
         # 3 - wait for hit
         self.vmi.resume_vm()
         self.stop_listen.clear()
