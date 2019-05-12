@@ -52,10 +52,10 @@ pause the VM and debug the kernel, but lack the guest knowledge to track and fol
 ## Features
 
 - attach to existing process
-    * Windows: Find `EPROCESS` and `ETHREADS` state
+    * Windows: find `EPROCESS` and `ETHREADS` state
     * Linux: at `CR3` load
 - attach new process:
-    * Windows (XP): Follow first thread creation and break at entrypoint
+    * Windows (XP): follow first thread creation and break at entrypoint
     * Linux: not implemented
 - singlestep/continue: wait for the process to be scheduled
     * process must have a single thread
