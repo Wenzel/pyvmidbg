@@ -380,7 +380,7 @@ class BreakpointManager:
         thread = self.ctx.get_thread()
         if thread.is_running():
             return
-        self.log.info('Waiting for thread %d to be scheduled', hex(thread.id))
+        self.log.info('Waiting for thread %s to be scheduled', hex(thread.id))
 
         def handle_breakpoint(vmi, event):
             self.stop_listen.set()
