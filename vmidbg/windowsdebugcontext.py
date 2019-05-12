@@ -3,7 +3,7 @@ import json
 import re
 from enum import Enum
 
-from libvmi import AccessContext, TranslateMechanism, Registers, X86Reg, VMIWinVer
+from libvmi import AccessContext, TranslateMechanism, Registers, X86Reg, VMIWinVer, LibvmiError
 
 from vmidbg.vmistruct import VMIStruct
 from vmidbg.abstractdebugcontext import AbstractDebugContext
@@ -153,16 +153,29 @@ class WindowsDebugContext(AbstractDebugContext):
         # set target desc
         dtb = self.vmi.get_vcpu_reg(X86Reg.CR3.value, 0)
         self.target_desc = self.dtb_to_desc(dtb)
-        # continue to NtContinue (this limits the chance that ETHREAD.StartAddress is paged out)
-        ntcontinue_addr = self.vmi.translate_ksym2v('NtContinue')
-        self.log.debug('NtContinue: %s', hex(ntcontinue_addr))
-        self.bpm.continue_until(ntcontinue_addr)
         # get ETHREAD.StartAddress address
         thread_desc = self.get_current_running_thread()
         thread_start_addr = thread_desc.start_addr
         self.log.debug('ETHREAD.StartAddress: %s', hex(thread_start_addr))
-        # continue to ETHREAD.StartAddress with hardware breakpoint
-        self.bpm.continue_until(thread_start_addr, True)
+        # we cannot use inject a pagefault via our mov eax, [eax], for unclear reasons
+        # the kernel will have a BSOD
+        # I tested moving to PspUserThreadStartup to have a lower IRQL (APC_LEVEL)
+        # doesn't work either
+        # so find another process where ETHREAD.StartAddress is mapped
+        # get paddr, and use this to place the breakpoint
+        thread_start_paddr = None
+        for desc in self.list_processes():
+            try:
+                dtb = desc.dtb
+                self.log.info('Checking if addr is mapped in %s space', desc.name)
+                thread_start_paddr = self.vmi.pagetable_lookup(dtb, thread_start_addr)
+            except LibvmiError:
+                self.log.info('Fail')
+            else:
+                self.log.info('Found at frame: %s', hex(thread_start_paddr))
+                break
+
+        self.bpm.continue_until(thread_start_addr, paddr=thread_start_paddr)
         if self.vmi.get_winver() == VMIWinVer.OS_WINDOWS_XP:
             # we are at BaseProcessStartThunk
             # read entrypoint address from EAX
