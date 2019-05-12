@@ -51,13 +51,15 @@ pause the VM and debug the kernel, but lack the guest knowledge to track and fol
 
 ## Features
 
-- intercept process at `CR3` load
-- read/write memory
-- get/set registers
-- continue execution
-- singlestep
+- attach to existing process
+    * Windows: Find `EPROCESS` and `ETHREADS` state
+    * Linux: at `CR3` load
+- attach new process:
+    * Windows (XP): Follow first thread creation and break at entrypoint
+    * Linux: not implemented
+- singlestep/continue: wait for the process to be scheduled
 - breakin (`CTRL-C`)
-- insert/remove software breakpoint
+- software breakpoints
 
 ## Requirements
 
