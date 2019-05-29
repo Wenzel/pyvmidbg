@@ -45,15 +45,33 @@ analyzing malicious code
 Existing solutions like GDB stubs included in `QEMU`, `VMware` or `VirtualBox` can only
 pause the VM and debug the kernel, but lack the guest knowledge to track and follow the rest of the processes.
 
+Project presentation at [Insomni'Hack 2019](https://insomnihack.ch/conference-2019/):
+- [video](https://www.youtube.com/watch?v=-nXY_p8c_bQ&list=PLcAhMYXnWf9t139KR-LhEMQuqmg8lRAgo&index=3)
+- [slides](https://drive.google.com/file/d/1ZMUszfwWDOljdDfPOJgkEfSabNy0UAJR/view)
+
 ### Vision
 
 ![vmidbg](https://user-images.githubusercontent.com/964610/53703373-9fed3580-3e11-11e9-96f8-47b3f38044cf.jpg)
+
+### State of hypervisor's VMI support
+
+- [Xen](https://wiki.xenproject.org/wiki/Virtual_Machine_Introspection)
+    * 2011: Xen 4.1: first hypervisor to support VMI upstream
+    * 2015: Xen 4.6: best hypervisor for VMI
+    * libvmi: fully supported
+- [KVM](https://github.com/KVM-VMI/kvm-vmi)
+    * 2017: BitDefender published a set VMI patches on the [mailing list](https://www.spinics.net/lists/kvm/msg151508.html)
+    * review and integration is still going on
+    * libvmi: partial support (memory and registers, no events)
+- VirtualBox
+    * unofficial VMI patches thanks to [Winbagility](https://github.com/Winbagility/Winbagility) project
+- VMware/Hyper-V: no sign of interest as of today
 
 ## Features
 
 - attach to existing process
     * Windows: find `EPROCESS` and `ETHREADS` state
-    * Linux: at `CR3` load
+    * Linux: pause at `CR3` load
 - attach new process:
     * Windows (XP): follow first thread creation and break at entrypoint
     * Linux: not implemented
