@@ -5,7 +5,7 @@ from functools import lru_cache
 from lxml import etree
 from binascii import hexlify, unhexlify
 
-from libvmi import Libvmi, INIT_DOMAINNAME, INIT_EVENTS, VMIOS, LibvmiError, X86Reg
+from libvmi import Libvmi, INIT_DOMAINNAME, INIT_EVENTS, VMIOS, LibvmiError, X86Reg, VMIInitData
 
 from .gdbstub import GDBStub, GDBPacket, GDBCmd, GDBSignal, PACKET_SIZE
 from .rawdebugcontext import RawDebugContext
@@ -17,10 +17,11 @@ SW_BREAKPOINT = b'\xcc'
 
 class LibVMIStub(GDBStub):
 
-    def __init__(self, conn, addr, vm_name, process):
+    def __init__(self, conn, addr, vm_name, process, kvmi_socket=None):
         super().__init__(conn, addr)
         self.vm_name = vm_name
         self.process = process
+        self.kvmi_socket = kvmi_socket
         self.cmd_to_handler = {
             GDBCmd.GEN_QUERY_GET: self.gen_query_get,
             GDBCmd.GEN_QUERY_SET: self.gen_query_set,
@@ -59,7 +60,11 @@ class LibVMIStub(GDBStub):
 
     def __enter__(self):
         # init LibVMI
-        self.vmi = Libvmi(self.vm_name, init_flags=INIT_DOMAINNAME | INIT_EVENTS, partial=True)
+        init_data = None
+        if self.kvmi_socket:
+            init_data = { VMIInitData.KVMI_SOCKET: self.kvmi_socket }
+        self.vmi = Libvmi(self.vm_name, init_flags=INIT_DOMAINNAME | INIT_EVENTS,
+                          init_data=init_data, partial=True)
         self.vmi.init_paging(flags=0)
         # catch every exception to force a clean exit with __exit__
         # where vmi.destroy() must be called
