@@ -215,7 +215,7 @@ class LibVMIStub(GDBStub):
         ]
 
         gen_regs_64 = [
-            X86Reg.R9, X86Reg.R10, X86Reg.R11, X86Reg.R12,
+            X86Reg.R8, X86Reg.R9, X86Reg.R10, X86Reg.R11, X86Reg.R12,
             X86Reg.R13, X86Reg.R14, X86Reg.R15
         ]
         # not available through libvmi
@@ -243,7 +243,7 @@ class LibVMIStub(GDBStub):
         ]
 
         gen_regs_64 = [
-            X86Reg.R9, X86Reg.R10, X86Reg.R11, X86Reg.R12,
+            X86Reg.R8, X86Reg.R9, X86Reg.R10, X86Reg.R11, X86Reg.R12,
             X86Reg.R13, X86Reg.R14, X86Reg.R15
         ]
 
