@@ -5,7 +5,6 @@ notifications:
     email: false
 python:
   - "3.5"
-  - "pypy3.5"
 
 before_install:
   # install libvmi dependencies
