@@ -20,6 +20,9 @@ class RawThread:
         # always alive, it's a VCPU
         return True
 
+    def is_running(self):
+        return True
+
     def read_registers(self):
         self.log.debug('%s: read registers', self.id)
         return self.vmi.get_vcpuregs(self.vcpu_id)
