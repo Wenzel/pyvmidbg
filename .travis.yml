@@ -1,4 +1,4 @@
-dist: trusty
+dist: bionic
 language: python
 sudo: enabled
 notifications:
@@ -12,7 +12,7 @@ before_install:
   - sudo apt-get update -qq
   - >
     sudo apt-get install -qq cmake bison flex check libjson-c-dev libglib2.0-dev
-    libxc1 libxenstore3.0 libxen-dev
+    libxenstore3.0 libxen-dev
     libvirt-dev
   # clone, compile and install libvmi
   - git clone https://github.com/libvmi/libvmi /tmp/libvmi
