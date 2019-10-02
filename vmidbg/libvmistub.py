@@ -62,7 +62,7 @@ class LibVMIStub(GDBStub):
         # init LibVMI
         init_data = None
         if self.kvmi_socket:
-            init_data = { VMIInitData.KVMI_SOCKET: self.kvmi_socket }
+            init_data = {VMIInitData.KVMI_SOCKET: self.kvmi_socket}
         self.vmi = Libvmi(self.vm_name, init_flags=INIT_DOMAINNAME | INIT_EVENTS,
                           init_data=init_data, partial=True)
         self.vmi.init_paging(flags=0)
