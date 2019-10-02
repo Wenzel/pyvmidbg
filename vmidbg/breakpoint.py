@@ -21,9 +21,9 @@ class BreakpointManager:
         # register int3 event
         self.int_event = IntEvent(self.cb_on_int3)
         self.vmi.register_event(self.int_event)
-        # register hardware debug event
-        self.debug_event = DebugEvent(self.cb_on_debug)
-        self.vmi.register_event(self.debug_event)
+        # # register hardware debug event
+        # self.debug_event = DebugEvent(self.cb_on_debug)
+        # self.vmi.register_event(self.debug_event)
         # single step event to handle wrong hits by sw breakpoints
         # enabled via EventResponse.TOGGLE_SINGLESTEP
         num_vcpus = self.vmi.get_num_vcpus()
