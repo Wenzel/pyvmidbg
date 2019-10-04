@@ -454,7 +454,7 @@ class LibVMIStub(GDBStub):
             # TODO refactoring, this should be treated as an unknown packet
             self.send_packet(GDBPacket(b''))
             return True
-        if re.match(b'Cont\?', packet_data):
+        if re.match(b'Cont\\?', packet_data):
             # query the list of supported actions for vCont
             # reply: vCont[;action…]
             # we do not support continue or singlestep with a signal

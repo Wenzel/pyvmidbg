@@ -22,7 +22,7 @@ def expect_ack(func):
                 func(self, *args, **kwargs)
                 # read ack
                 c_ack = self.sock.recv(1)
-                if re.match(b'\+', c_ack):
+                if re.match(b'\\+', c_ack):
                     self.log.debug('send: ack')
                     pkt_ack = True
                 if re.match(b'-', c_ack):
@@ -119,7 +119,7 @@ class GDBStub():
                 # create a normal packet to let stub call a handler
                 return b'\x03'
             # packet ?
-            m = re.match(b'\$(?P<data>.*?)#(?P<checksum>..)', self.buffer)
+            m = re.match(b'\\$(?P<data>.*?)#(?P<checksum>..)', self.buffer)
             if m:
                 packet_data = m.group('data')
                 packet_checksum = int(m.group('checksum'), 16)
@@ -153,7 +153,7 @@ class GDBStub():
 
         # read first ack
         c_ack = self.sock.recv(1)
-        if not re.match(b'\+', c_ack):
+        if not re.match(b'\\+', c_ack):
             raise RuntimeError('Fail to receive first ack')
 
         while self.attached:
