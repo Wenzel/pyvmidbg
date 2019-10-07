@@ -47,14 +47,24 @@ class WindowsThread:
             return self.vmi.get_vcpuregs(0)
         else:
             regs = Registers()
-            regs[X86Reg.RAX] = self.kthread.TrapFrame.Eax
-            regs[X86Reg.RBX] = self.kthread.TrapFrame.Ebx
-            regs[X86Reg.RCX] = self.kthread.TrapFrame.Ecx
-            regs[X86Reg.RDX] = self.kthread.TrapFrame.Edx
-            regs[X86Reg.RSI] = self.kthread.TrapFrame.Esi
-            regs[X86Reg.RDI] = self.kthread.TrapFrame.Edi
-            regs[X86Reg.RIP] = self.kthread.TrapFrame.Eip
-            regs[X86Reg.RBP] = self.kthread.TrapFrame.Ebp
+            if self.vmi.get_address_width() == 4:
+                regs[X86Reg.RAX] = self.kthread.TrapFrame.Eax
+                regs[X86Reg.RBX] = self.kthread.TrapFrame.Ebx
+                regs[X86Reg.RCX] = self.kthread.TrapFrame.Ecx
+                regs[X86Reg.RDX] = self.kthread.TrapFrame.Edx
+                regs[X86Reg.RSI] = self.kthread.TrapFrame.Esi
+                regs[X86Reg.RDI] = self.kthread.TrapFrame.Edi
+                regs[X86Reg.RIP] = self.kthread.TrapFrame.Eip
+                regs[X86Reg.RBP] = self.kthread.TrapFrame.Ebp
+            else:
+                regs[X86Reg.RAX] = self.kthread.TrapFrame.Rax
+                regs[X86Reg.RBX] = self.kthread.TrapFrame.Rbx
+                regs[X86Reg.RCX] = self.kthread.TrapFrame.Rcx
+                regs[X86Reg.RDX] = self.kthread.TrapFrame.Rdx
+                regs[X86Reg.RSI] = self.kthread.TrapFrame.Rsi
+                regs[X86Reg.RDI] = self.kthread.TrapFrame.Rdi
+                regs[X86Reg.RIP] = self.kthread.TrapFrame.Rip
+                regs[X86Reg.RBP] = self.kthread.TrapFrame.Rbp
             regs[X86Reg.RSP] = self.kthread.KernelStack
             return regs
 
