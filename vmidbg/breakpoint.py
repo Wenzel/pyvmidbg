@@ -328,7 +328,6 @@ class BreakpointManager:
             return True
         else:
             return True
-        return False
 
     def inject_pagefault(self, addr):
         """
