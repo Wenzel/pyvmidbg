@@ -214,21 +214,31 @@ class LibVMIStub(GDBStub):
         cur_thread = self.ctx.get_thread()
         regs = cur_thread.read_registers()
 
-        gen_regs_32 = [
-            X86Reg.RAX, X86Reg.RCX, X86Reg.RDX, X86Reg.RBX,
-            X86Reg.RSP, X86Reg.RBP, X86Reg.RSI, X86Reg.RDI, X86Reg.RIP
-        ]
+        # for some reason,  GDB has a different parsing for gen registers
+        # between 32 and 64 bits
+        if addr_width == 4:
+            gen_regs_x86 = [
+                X86Reg.RAX, X86Reg.RCX, X86Reg.RDX, X86Reg.RBX,
+                X86Reg.RSP, X86Reg.RBP, X86Reg.RSI, X86Reg.RDI
+            ]
+        else:
+            gen_regs_x86 = [
+                X86Reg.RAX, X86Reg.RBX, X86Reg.RCX, X86Reg.RDX,
+                X86Reg.RSI, X86Reg.RDI, X86Reg.RBP, X86Reg.RSP
+            ]
 
-        gen_regs_64 = [
+        gen_regs_x64 = [
             X86Reg.R8, X86Reg.R9, X86Reg.R10, X86Reg.R11, X86Reg.R12,
             X86Reg.R13, X86Reg.R14, X86Reg.R15
         ]
         # not available through libvmi
         seg_regs = [x+1 for x in range(0, 6)]
         # write general registers
-        msg = b''.join([hexlify(struct.pack(pack_fmt, regs[r])) for r in gen_regs_32])
+        msg = b''.join([hexlify(struct.pack(pack_fmt, regs[r])) for r in gen_regs_x86])
         if addr_width == 8:
-            msg += b''.join([hexlify(struct.pack(pack_fmt, regs[r])) for r in gen_regs_64])
+            msg += b''.join([hexlify(struct.pack(pack_fmt, regs[r])) for r in gen_regs_x64])
+        # write RIP
+        msg += hexlify(struct.pack(pack_fmt, regs[X86Reg.RIP]))
         # write eflags
         msg += hexlify(struct.pack(pack_fmt, regs[X86Reg.RFLAGS]))
         # write segment registers
@@ -242,12 +252,21 @@ class LibVMIStub(GDBStub):
             pack_fmt = '@I'
         else:
             pack_fmt = '@Q'
-        gen_regs_32 = [
-            X86Reg.RAX, X86Reg.RCX, X86Reg.RDX, X86Reg.RBX,
-            X86Reg.RSP, X86Reg.RBP, X86Reg.RSI, X86Reg.RDI, X86Reg.RIP
-        ]
 
-        gen_regs_64 = [
+        # for some reason,  GDB has a different parsing for gen registers
+        # between 32 and 64 bits
+        if addr_width == 4:
+            gen_regs_x86 = [
+                X86Reg.RAX, X86Reg.RCX, X86Reg.RDX, X86Reg.RBX,
+                X86Reg.RSP, X86Reg.RBP, X86Reg.RSI, X86Reg.RDI
+            ]
+        else:
+            gen_regs_x86 = [
+                X86Reg.RAX, X86Reg.RBX, X86Reg.RCX, X86Reg.RDX,
+                X86Reg.RSI, X86Reg.RDI, X86Reg.RBP, X86Reg.RSP
+            ]
+
+        gen_regs_x64 = [
             X86Reg.R8, X86Reg.R9, X86Reg.R10, X86Reg.R11, X86Reg.R12,
             X86Reg.R13, X86Reg.R14, X86Reg.R15
         ]
@@ -256,16 +275,19 @@ class LibVMIStub(GDBStub):
         # regs = Registers()
         regs = self.vmi.get_vcpuregs(0)
         iter = struct.iter_unpack(pack_fmt, unhexlify(packet_data))
-        for r in gen_regs_32:
+        for r in gen_regs_x86:
             value, *rest = next(iter)
             logging.debug('%s: %x', r.name, value)
             regs[r] = value
         # 64 bits ?
         if addr_width == 8:
-            for r in gen_regs_64:
+            for r in gen_regs_x64:
                 value, *rest = next(iter)
                 logging.debug('%s: %x', r.name, value)
                 regs[r] = value
+        # RIP ?
+        value, *rest = next(iter)
+        regs[X86Reg.RIP] = value
         # eflags
         value, *rest = next(iter)
         regs[X86Reg.RFLAGS] = value
@@ -432,7 +454,7 @@ class LibVMIStub(GDBStub):
             # TODO refactoring, this should be treated as an unknown packet
             self.send_packet(GDBPacket(b''))
             return True
-        if re.match(b'Cont\?', packet_data):
+        if re.match(b'Cont\\?', packet_data):
             # query the list of supported actions for vCont
             # reply: vCont[;action…]
             # we do not support continue or singlestep with a signal

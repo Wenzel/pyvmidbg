@@ -7,6 +7,7 @@ class VMIStruct:
     STANDARD_TYPES = {
         'unsigned char': '=B',
         'unsigned long': '=L',
+        'unsigned long long': '=Q',
         'long': '=l'
     }
 
