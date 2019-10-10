@@ -162,7 +162,7 @@ class WindowsDebugContext(AbstractDebugContext):
         # continue to KithreadStartup
         self.bpm.continue_until(thread_startup_addr)
         # set target desc
-        dtb = self.vmi.get_vcpu_reg(X86Reg.CR3.value, 0)
+        dtb = self.vmi.get_vcpureg(X86Reg.CR3.value, 0)
         self.target_desc = self.dtb_to_desc(dtb)
         # get ETHREAD.StartAddress address
         thread_desc = self.get_current_running_thread()
@@ -190,7 +190,7 @@ class WindowsDebugContext(AbstractDebugContext):
         if self.vmi.get_winver() == VMIWinVer.OS_WINDOWS_XP:
             # we are at BaseProcessStartThunk
             # read entrypoint address from EAX
-            entrypoint_addr = self.vmi.get_vcpu_reg(X86Reg.RAX.value, 0)
+            entrypoint_addr = self.vmi.get_vcpureg(X86Reg.RAX.value, 0)
             self.log.debug('Entrypoint: %s', hex(entrypoint_addr))
             # continue to entrypoint
             self.bpm.continue_until(entrypoint_addr)
@@ -202,7 +202,7 @@ class WindowsDebugContext(AbstractDebugContext):
 
     def get_dtb(self):
         if not self.target_desc:
-            return self.vmi.get_vcpu_reg(X86Reg.CR3.value, 0)
+            return self.vmi.get_vcpureg(X86Reg.CR3.value, 0)
         else:
             return self.target_desc.dtb
 
