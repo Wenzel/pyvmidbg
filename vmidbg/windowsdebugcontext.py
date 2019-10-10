@@ -76,7 +76,7 @@ class WindowsTaskDescriptor:
         self.rekall = rekall
         self.rekall_task = self.rekall['$STRUCTS']['_EPROCESS'][1]
         self.addr = task_addr - self.vmi.get_offset('win_tasks')
-        self.dtb = self.vmi.read_32_va(self.addr + self.vmi.get_offset('win_pdbase'), 0)
+        self.dtb = self.vmi.read_addr_va(self.addr + self.vmi.get_offset('win_pdbase'), 0)
         self.pid = self.vmi.read_32_va(self.addr + self.vmi.get_offset('win_pid'), 0)
         self.name = self.vmi.read_str_va(self.addr + self.vmi.get_offset('win_pname'), 0)
         self.thread_head = self.addr + self.rekall_task['ThreadListHead'][0]
