@@ -156,10 +156,13 @@ class WindowsDebugContext(AbstractDebugContext):
 
     def attach_new_process(self):
         self.log.info('Waiting for %s process to start...', self.target_name)
-        # get KiThreadStartup addr
-        thread_startup_addr = self.vmi.translate_ksym2v('KiThreadStartup')
-        self.log.debug('KiThreadStartup: %s', hex(thread_startup_addr))
-        # continue to KithreadStartup
+        if self.vmi.get_winver() == VMIWinVer.OS_WINDOWS_XP:
+            thread_startup_sym = 'KiThreadStartup'
+        else:
+            thread_startup_sym = 'KiStartUserThread'
+        thread_startup_addr = self.vmi.translate_ksym2v(thread_startup_sym)
+        self.log.debug('%s: %s', thread_startup_sym, hex(thread_startup_addr))
+        # continue to thread startup routine
         self.bpm.continue_until(thread_startup_addr)
         # set target desc
         dtb = self.vmi.get_vcpureg(X86Reg.CR3.value, 0)
@@ -168,6 +171,7 @@ class WindowsDebugContext(AbstractDebugContext):
         thread_desc = self.get_current_running_thread()
         thread_start_addr = thread_desc.start_addr
         self.log.debug('ETHREAD.StartAddress: %s', hex(thread_start_addr))
+        # TODO: fix pagefault injection
         # we cannot use inject a pagefault via our mov eax, [eax], for unclear reasons
         # the kernel will have a BSOD
         # I tested moving to PspUserThreadStartup to have a lower IRQL (APC_LEVEL)
@@ -188,14 +192,26 @@ class WindowsDebugContext(AbstractDebugContext):
 
         self.bpm.continue_until(thread_start_addr, paddr=thread_start_paddr)
         if self.vmi.get_winver() == VMIWinVer.OS_WINDOWS_XP:
-            # we are at BaseProcessStartThunk
-            # read entrypoint address from EAX
-            entrypoint_addr = self.vmi.get_vcpureg(X86Reg.RAX.value, 0)
-            self.log.debug('Entrypoint: %s', hex(entrypoint_addr))
-            # continue to entrypoint
-            self.bpm.continue_until(entrypoint_addr)
+            # BaseProcessStartThunk
+            if self.vmi.get_address_width() == 4:
+                # 32 bits
+                # read entrypoint address from EAX
+                entrypoint_addr = self.vmi.get_vcpu_reg(X86Reg.RAX.value, 0)
+            else:
+                # 64 bits
+                raise RuntimeError('Not implemented')
         else:
-            raise RuntimeError('Not implemented')
+            # RtlUserThreadStart
+            if self.vmi.get_address_width() == 4:
+                # 32 bits
+                raise RuntimeError('Not implemented')
+            else:
+                # 64 bits
+                entrypoint_addr = self.vmi.get_vcpu_reg(X86Reg.RCX.value, 0)
+                self.log.debug("Entrypoint")
+        self.log.debug('Entrypoint: %s', hex(entrypoint_addr))
+        # continue to entrypoint
+        self.bpm.continue_until(entrypoint_addr)
 
     def detach(self):
         self.vmi.resume_vm()
