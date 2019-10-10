@@ -330,41 +330,10 @@ class BreakpointManager:
             return True
 
     def inject_pagefault(self, addr):
-        """
-        inject a shellcode that will trigger a memory access in the guest,
-        and let the guest recover from the pagefault to remap the missing frame in
-        physical memory
-        :param addr:
-        :return:
-        """
-        # prepare shellcode
-        # mov eax, [eax]
-        # 0x8B 0x00
-        shellcode = b'\x8B\x00'
-        # save registers
-        logging.debug('save registers')
-        orig_regs = self.vmi.get_vcpuregs(0)
-        # save original instructions at current rip
-        logging.debug('save original instructions')
-        acc_ctx = self.ctx.get_access_context(orig_regs[X86Reg.RIP])
-        count = len(shellcode)
-        orig_opcodes, *rest = self.vmi.read(acc_ctx, count)
-        # set eax as our faulty address
-        logging.debug('set eax as our faulty address')
-        self.vmi.set_vcpureg(addr, X86Reg.RAX.value, 0)
-        # inject shellcode
-        logging.debug('write shellcode')
-        self.vmi.write(acc_ctx, shellcode)
-        # continue until after shellcode
-        logging.debug('continue after shellcode')
-        after_shellcode_addr = orig_regs[X86Reg.RIP] + len(shellcode)
-        self.continue_until(after_shellcode_addr)
-        # restore registers
-        logging.debug('restore registers')
-        self.vmi.set_vcpuregs(orig_regs, 0)
-        # restore instructions
-        logging.debug('restore original instructions')
-        self.vmi.write(acc_ctx, orig_opcodes)
+        # error on instruction fetch
+        error_code = (1 << 4)
+        self.vmi.request_page_fault(0, addr, error_code)
+        # TODO: how to let guest recover from pagefault ?
         # confirm that our address is pagedin now
         dtb = self.ctx.get_dtb()
         try:
