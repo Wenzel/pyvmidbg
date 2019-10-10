@@ -274,7 +274,7 @@ class BreakpointManager:
                 value &= ~mask
             return value
         # read old DR7 value
-        dr7_value = self.vmi.get_vcpu_reg(X86Reg.DR7.value, 0)
+        dr7_value = self.vmi.get_vcpureg(X86Reg.DR7.value, 0)
         new_value = set_bit(dr7_value, 1, enabled)
         self.vmi.set_vcpureg(new_value, X86Reg.DR7.value, 0)
 

@@ -52,7 +52,7 @@ class RawDebugContext(AbstractDebugContext):
 
     def get_dtb(self):
         # get current CR3
-        return self.vmi.get_vcpu_reg(X86Reg.CR3.value, 0)
+        return self.vmi.get_vcpureg(X86Reg.CR3.value, 0)
 
     def get_access_context(self, address):
         return AccessContext(TranslateMechanism.PROCESS_DTB,
