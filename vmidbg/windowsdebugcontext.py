@@ -196,7 +196,7 @@ class WindowsDebugContext(AbstractDebugContext):
             if self.vmi.get_address_width() == 4:
                 # 32 bits
                 # read entrypoint address from EAX
-                entrypoint_addr = self.vmi.get_vcpu_reg(X86Reg.RAX.value, 0)
+                entrypoint_addr = self.vmi.get_vcpureg(X86Reg.RAX.value, 0)
             else:
                 # 64 bits
                 raise RuntimeError('Not implemented')
@@ -207,7 +207,7 @@ class WindowsDebugContext(AbstractDebugContext):
                 raise RuntimeError('Not implemented')
             else:
                 # 64 bits
-                entrypoint_addr = self.vmi.get_vcpu_reg(X86Reg.RCX.value, 0)
+                entrypoint_addr = self.vmi.get_vcpureg(X86Reg.RCX.value, 0)
                 self.log.debug("Entrypoint")
         self.log.debug('Entrypoint: %s', hex(entrypoint_addr))
         # continue to entrypoint
