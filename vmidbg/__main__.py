@@ -7,11 +7,10 @@ Usage:
   vmidbg.py (-h | --help)
 
 Options:
-  -d --debug                            Enable debugging
-  -a ADDR, --address=<ADDR>             Server address to listen on [default: 127.0.0.1]
-  -k SOCKET --kvmi-socket SOCKET        If hypervisor is KVM, specify the KVMi socket
-  -h --help                             Show this screen.
-  --version                             Show version.
+  -d --debug                    Enable debugging
+  -a ADDR, --address=<ADDR>     Server address to listen on [default: 127.0.0.1]
+  -h --help                     Show this screen.
+  --version                     Show version.
 
 """
 
@@ -26,7 +25,6 @@ def main():
     args = docopt(__doc__)
     debug = args['--debug']
     address = args['--address']
-    kvmi_socket = args['--kvmi-socket']
     port = int(args['<port>'])
     vm_name = args['<vm_name>']
     process = args['<process>']
@@ -36,7 +34,7 @@ def main():
         log_level = logging.DEBUG
     logging.basicConfig(level=log_level)
 
-    with GDBServer(address, port, stub_cls=LibVMIStub, stub_args=(vm_name, process, kvmi_socket)) as server:
+    with GDBServer(address, port, stub_cls=LibVMIStub, stub_args=(vm_name, process)) as server:
         server.listen()
 
 
