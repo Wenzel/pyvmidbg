@@ -59,10 +59,11 @@ Project presentation at [Insomni'Hack 2019](https://insomnihack.ch/conference-20
     * 2011: Xen 4.1: first hypervisor to support VMI upstream
     * 2015: Xen 4.6: best hypervisor for VMI
     * libvmi: fully supported
+    * pyvmidbg: supported
 - [KVM](https://github.com/KVM-VMI/kvm-vmi)
     * 2017: BitDefender published a set VMI patches on the [mailing list](https://www.spinics.net/lists/kvm/msg151508.html)
-    * review and integration is still going on
-    * libvmi: partial support (memory and registers, no events)
+    * libvmi: support is ongoing, see `kvm-vmi/libvmi` (branch `kvmi`)
+    * pyvmidbg: supported
 - VirtualBox
     * unofficial VMI patches thanks to [Winbagility](https://github.com/Winbagility/Winbagility) project
 - VMware/Hyper-V: no sign of interest as of today
@@ -116,6 +117,11 @@ vmidbg <port> <vm> [<process>]
 5. avoid breakpoints from the rest of the system, only hit if `cmd.exe` is executing
 
 ![pyvmidbg](https://github.com/Wenzel/wenzel.github.io/blob/master/public/images/pyvmidbg-demo.gif)
+
+## Limitations
+
+- the VM must have 1 VCPU
+- no steath breakpoints implemented yet (`int3` into memory)
 
 ## References
 
