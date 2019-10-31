@@ -53,6 +53,13 @@ Project presentation at [Insomni'Hack 2019](https://insomnihack.ch/conference-20
 
 ![vmidbg](https://user-images.githubusercontent.com/964610/53703373-9fed3580-3e11-11e9-96f8-47b3f38044cf.jpg)
 
+Current support:
+- Stubs:
+    - GDB
+- Hypervisors:
+    - Xen
+    - KVM
+
 ### State of hypervisor's VMI support
 
 - [Xen](https://wiki.xenproject.org/wiki/Virtual_Machine_Introspection)
@@ -73,8 +80,8 @@ Project presentation at [Insomni'Hack 2019](https://insomnihack.ch/conference-20
 - attach to existing process
     * Windows: find `EPROCESS` and `ETHREADS` state
     * Linux: pause at `CR3` load
-- attach new process:
-    * Windows (XP): follow first thread creation and break at entrypoint
+- attach new process (entrypoint):
+    * Windows: follow first thread creation and break at entrypoint
     * Linux: not implemented
 - singlestep/continue: wait for the process to be scheduled
     * process must have a single thread
@@ -108,6 +115,8 @@ vmidbg <port> <vm> [<process>]
 
 ## Demo
 
+### Debugging `cmd.exe` in Windows XP
+
 [high-quality](https://drive.google.com/open?id=1clumU_P8K-M1mgQ4RaNVSrWg6sxojw8d)
 
 1. starts `cmd.exe` in `Windows XP` nested VM in Xen
@@ -117,6 +126,10 @@ vmidbg <port> <vm> [<process>]
 5. avoid breakpoints from the rest of the system, only hit if `cmd.exe` is executing
 
 ![pyvmidbg](https://github.com/Wenzel/wenzel.github.io/blob/master/public/images/pyvmidbg-demo.gif)
+
+### Debugging `mspaint.exe` in Windows 10
+
+[Debugging `mspaint.exe`](https://drive.google.com/drive/folders/1M0xzBlaLaBs95p6L8u1Df9QX9y8cC560)
 
 ## Limitations
 
