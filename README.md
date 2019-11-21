@@ -129,7 +129,7 @@ vmidbg <port> <vm> [<process>]
 
 ### Debugging `mspaint.exe` in Windows 10
 
-[Debugging `mspaint.exe`](https://drive.google.com/drive/folders/1M0xzBlaLaBs95p6L8u1Df9QX9y8cC560)
+[Debugging `mspaint.exe`](https://drive.google.com/file/d/15VUAXmUJg7pY_EL0rNVxrQdWs5VTdvZI/view?usp=sharing)
 
 ## Limitations
 
