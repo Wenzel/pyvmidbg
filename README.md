@@ -1,6 +1,7 @@
 # pyvmidbg
 
 [![Slack](https://maxcdn.icons8.com/Color/PNG/48/Mobile/slack-48.png)](https://vmidbg.slack.com)
+[![Build Status](https://travis-ci.org/Wenzel/pyvmidbg.svg?branch=master)](https://travis-ci.org/Wenzel/pyvmidbg)
 [![Join the chat at https://gitter.im/pyvmidbg/Lobby](https://badges.gitter.im/trailofbits/algo.svg)](https://gitter.im/pyvmidbg/Lobby)
 [![standard-readme compliant](https://img.shields.io/badge/readme%20style-standard-brightgreen.svg?style=flat-square)](https://github.com/RichardLitt/standard-readme)
 
