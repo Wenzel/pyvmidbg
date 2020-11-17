@@ -118,15 +118,13 @@ vmidbg <port> <vm> [<process>]
 
 ### Debugging `cmd.exe` in Windows XP
 
-[high-quality](https://drive.google.com/open?id=1clumU_P8K-M1mgQ4RaNVSrWg6sxojw8d)
+[Demo link](https://drive.google.com/open?id=1clumU_P8K-M1mgQ4RaNVSrWg6sxojw8d)
 
 1. starts `cmd.exe` in `Windows XP` nested VM in Xen
 2. starts `pyvmidbg` and target a process named `cmd`
 3. connects to stub with `radare2`
 4. set breakpoints on `ntdll!NtOpenFile` and `ntkrnlpa!NtOpenFile`
 5. avoid breakpoints from the rest of the system, only hit if `cmd.exe` is executing
-
-![pyvmidbg](https://github.com/Wenzel/wenzel.github.io/blob/master/public/images/pyvmidbg-demo.gif)
 
 ### Debugging `mspaint.exe` in Windows 10
 
